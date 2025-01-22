@@ -1,0 +1,99 @@
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+import time
+import re
+
+
+def configurar_navegador():
+    # Configurar opciones de Chrome
+    chrome_options = Options()
+    # Ejecuta en modo headless (sin interfaz gráfica)
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--window-size=800,600")
+
+    # Iniciar el navegador
+    service = Service(ChromeDriverManager().install())
+    return webdriver.Chrome(service=service, options=chrome_options)
+
+
+def leer_nombres_y_enlaces_desde_txt(filename):
+    try:
+        with open(filename, 'r', encoding='utf-8') as file:
+            contenido = file.read()
+
+        # Utilizar expresiones regulares para extraer los nombres y enlaces
+        videos = []
+        patrones = re.findall(
+            r'"nombre": "(.*?)".*?"link_video": "(.*?)"', contenido, re.DOTALL)
+
+        for match in patrones:
+            nombre, enlace = match
+            videos.append({'nombre': nombre, 'link_video': enlace})
+
+        #print(f"Videos leídos desde el archivo: {videos}")
+        return videos
+
+    except FileNotFoundError:
+        print(f"El archivo '{filename}' no fue encontrado.")
+        return []
+
+
+def buscar_boton_descarga(driver, video_url):
+    try:
+        driver.get(video_url)
+        time.sleep(5)  # Espera para que la página cargue
+
+        # Buscar el botón de descarga
+        boton_descarga = driver.find_element(By.CLASS_NAME, "btn-success")
+        if boton_descarga:
+            # Obtener el enlace de descarga
+            enlace_descarga = boton_descarga.get_attribute("href")
+            return enlace_descarga
+        else:
+            print(f"No se encontró el botón de descarga en {video_url}")
+            return None
+
+    except Exception as e:
+        print(f"Error al acceder a {video_url}: {e}")
+        return None
+
+
+def guardar_resultados(videos_con_enlace, filename):
+    with open(filename, 'w', encoding='utf-8') as file:
+        for video in videos_con_enlace:
+            file.write(f'"nombre": "{video["nombre"]}",\n')
+            file.write(f'"link_video": "{video["link_video"]}",\n')
+            file.write(f'"link_descarga": "{video["link_descarga"]}"\n')
+            file.write("-" * 40 + "\n")
+
+
+# Leer los videos desde el archivo .txt
+videos = leer_nombres_y_enlaces_desde_txt("resultados_videos.txt")
+
+# Iniciar el navegador
+driver = configurar_navegador()
+
+# Lista para almacenar los videos con enlaces de descarga
+videos_con_enlace = []
+
+# Buscar los botones de descarga para cada video
+for video in videos:
+    print(f"Buscando enlace de descarga para: {video['nombre']}")
+    enlace_descarga = buscar_boton_descarga(driver, video['link_video'])
+
+    if enlace_descarga:
+        video['link_descarga'] = enlace_descarga
+        videos_con_enlace.append(video)
+
+# Guardar los resultados en un archivo
+guardar_resultados(videos_con_enlace, "resultados_link.txt")
+
+# Finalizar el navegador
+driver.quit()
+
+print("Datos guardados en 'resultados_link.txt'")

@@ -1,0 +1,11 @@
+Cantidad de videos encontrados: 3
+
+"nombre": "Magic Maker: Isekai Mahou no Tsukurikata 3",
+"link_video": "https://tioanime.com/ver/magic-maker-isekai-mahou-no-tsukurikata-3"
+----------------------------------------
+"nombre": "Izure Saikyou no Renkinjutsushi? 4",
+"link_video": "https://tioanime.com/ver/izure-saikyou-no-renkinjutsushi-4"
+----------------------------------------
+"nombre": "Ishura 15",
+"link_video": "https://tioanime.com/ver/ishura-15"
+----------------------------------------
