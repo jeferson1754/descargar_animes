@@ -75,7 +75,6 @@ def leer_nombres_desde_txt(filename):
         return []
 
 
-
 def buscar_videos(url, nombres_videos):
     try:
         # Obtener el contenido de la página web
@@ -108,6 +107,7 @@ def buscar_videos(url, nombres_videos):
     except requests.exceptions.RequestException as e:
         print(f"Error al conectar con la página: {e}")
         return []
+
 
 def guardar_resultados_videos_txt(videos, filename):
     with open(filename, 'w', encoding='utf-8') as file:
@@ -163,6 +163,46 @@ def confirmar_descarga(nombres_animes):
             print("Por favor, responde con 'Y' (sí) o 'N' (no).")
 
 
+def verificar_si_descargado(nombres_animes, download_dir):
+    """
+    Verifica si un archivo con el nombre del anime ya está descargado en el directorio especificado.
+    Compara el nombre del anime con los archivos presentes en la carpeta de descargas.
+
+    Args:
+    - nombre_anime (str): El nombre del anime a buscar.
+    - download_dir (str): El directorio donde se descargan los archivos.
+
+    Returns:
+    - bool: True si el archivo ya está descargado, False si no.
+    """
+    # Convertir el nombre del anime a minúsculas para hacer una comparación insensible a mayúsculas
+    no_descargados = []
+
+    print("\nVerificando el estado de los animes en el directorio de descargas...")
+
+    # Listar los archivos en el directorio de descargas
+    archivos_descargados = os.listdir(download_dir)
+
+    for nombre in nombres_animes:
+        # Convertir el nombre del anime a minúsculas para hacer una comparación insensible a mayúsculas
+        nombre_anime_lower = nombre.lower()
+        encontrado = False
+
+        # Comprobar si algún archivo en el directorio contiene el nombre del anime
+        for archivo in archivos_descargados:
+            if nombre_anime_lower in archivo.lower() and archivo.endswith(".mp4"):
+                print(f"✅ El anime '{
+                      nombre}' ya está descargado como '{archivo}'.")
+                encontrado = True
+                break  # Salir del bucle interno si se encuentra el archivo
+
+        if not encontrado:
+            print(f"❌ El anime '{nombre}' no ha sido descargado aún.")
+            no_descargados.append(nombre)
+
+    return no_descargados
+
+
 def buscar_boton_descarga(driver, video_url):
     try:
         driver.get(video_url)
@@ -184,34 +224,58 @@ def buscar_boton_descarga(driver, video_url):
 
 
 def flujo_descarga_animes(file_name, download_dir):
-    # Leer los videos desde el archivo .txt
-    nombres_animes = leer_nombres_desde_txt(file_name)
+    """
+     Gestiona el proceso de búsqueda y descarga de animes desde una lista de nombres.
 
-    # Paso 3: Buscar videos relacionados con los animes
-    print("Buscando videos relacionados...")
+     Args:
+         file_name (str): Archivo .txt con los nombres de los animes.
+         url_tioanime (str): URL base del sitio web de TioAnime.
+         download_dir (str): Directorio donde se descargarán los videos.
+     """
+    # Paso 1: Leer los nombres de los animes desde el archivo .txt
+    nombres_animes = leer_nombres_desde_txt(file_name)
+    if not nombres_animes:
+        print("El archivo no contiene nombres de animes.")
+        return
+
+        # Paso 2: Buscar videos relacionados con los nombres de animes
+    print("Buscando videos relacionados con los nombres indicados...")
     videos_encontrados = buscar_videos(url_tioanime, nombres_animes)
 
     if not videos_encontrados:
-        print("No se encontraron videos para los animes indicados.")
+        print("No se encontraron videos relacionados con los animes indicados.")
         return
 
-    # Paso 4: Guardar resultados de videos encontrados
-    guardar_resultados_videos_txt(videos_encontrados, "resultados_videos.txt")
+        # Paso 3: Guardar los resultados de videos encontrados
+    guardar_resultados_videos_txt(
+        videos_encontrados, "resultados_videos.txt")
 
+    # Leer los nombres de los videos desde el archivo de resultados
     videos_animes = leer_nombres_desde_txt("resultados_videos.txt")
-
     if not videos_animes:
-        print("No se encontraron nombres de animes para descargar.")
+        print("No se encontraron nombres de videos para descargar.")
         return
 
-    # Paso 2: Confirmar si el usuario quiere descargar
-    if not confirmar_descarga(videos_animes):
-        return  # Salir si el usuario no quiere proceder
+        # Paso 4: Verificar si los animes ya están descargados
+    print("Verificando si los animes ya están descargados...")
+    animes_no_descargados = verificar_si_descargado(
+        videos_animes, download_dir)
 
-    # Iniciar el navegador
+    if not animes_no_descargados:
+        print("\nTodos los animes ya han sido descargados.")
+        return
+
+        # Paso 5: Confirmar si el usuario quiere descargar los animes no descargados
+    print("\nEstos animes no están descargados y estarán disponibles para la descarga:")
+    for idx, anime in enumerate(animes_no_descargados, 1):
+        print(f"{idx}. {anime}")
+
+    if not confirmar_descarga(animes_no_descargados):
+        print("El usuario canceló la descarga.")
+        return
+
     driver = configurar_navegador(download_dir)
 
-    # Buscar los botones de descarga para cada video
     for video in videos_encontrados:
         print(f"Buscando enlace de descarga para: {video['nombre']}")
         enlace_descarga = buscar_boton_descarga(
@@ -256,7 +320,7 @@ def hacer_click_en_boton_descarga(driver, enlace_descarga, download_dir, nombre_
 
 def verificar_archivo_reciente(download_dir, nombre_video):
     print("Esperando pacientemente durante un minuto...")
-    time.sleep(60)  # Espera durante 1 minuto
+    time.sleep(500)  # Espera durante 1 minuto
     print("¡Un minuto ha pasado! Ahora, podemos continuar con lo que necesites.")
 
 
