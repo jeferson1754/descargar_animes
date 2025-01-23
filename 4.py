@@ -6,6 +6,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 import requests
 import time
 import re
@@ -74,6 +75,7 @@ def leer_nombres_desde_txt(filename):
         return []
 
 
+
 def buscar_videos(url, nombres_videos):
     try:
         # Obtener el contenido de la página web
@@ -87,19 +89,25 @@ def buscar_videos(url, nombres_videos):
         # Buscar todos los enlaces en la página
         for enlace in soup.find_all('a', href=True):
             texto = enlace.text.strip()
-            for nombre in nombres_videos:
-                if nombre.lower() in texto.lower():  # Comparar ignorando mayúsculas y minúsculas
-                    videos_encontrados.append({
-                        'nombre': texto,
-                        'enlace': enlace['href']
-                    })
+            href = enlace['href']
+
+            # Unir la URL base con el enlace relativo
+            url_completa = urljoin(url, href)
+
+            # Verificar si el enlace pertenece al formato "https://tioanime.com/ver/(nombre_anime)"
+            if "https://tioanime.com/ver/" in url_completa:
+                for nombre in nombres_videos:
+                    if nombre.lower() in texto.lower():  # Comparar ignorando mayúsculas y minúsculas
+                        videos_encontrados.append({
+                            'nombre': texto,
+                            'enlace': url_completa
+                        })
 
         return videos_encontrados
 
     except requests.exceptions.RequestException as e:
         print(f"Error al conectar con la página: {e}")
         return []
-
 
 def guardar_resultados_videos_txt(videos, filename):
     with open(filename, 'w', encoding='utf-8') as file:
@@ -110,7 +118,7 @@ def guardar_resultados_videos_txt(videos, filename):
         for video in videos:
             file.write(f'"nombre": "{video["nombre"]}",\n')
             file.write(
-                f'"link_video": "https://tioanime.com{video["enlace"]}"\n')
+                f'"link_video": "{video["enlace"]}"\n')
             file.write("-" * 40 + "\n")
 
 
@@ -195,7 +203,7 @@ def flujo_descarga_animes(file_name, download_dir):
     if not videos_animes:
         print("No se encontraron nombres de animes para descargar.")
         return
-    
+
     # Paso 2: Confirmar si el usuario quiere descargar
     if not confirmar_descarga(videos_animes):
         return  # Salir si el usuario no quiere proceder
@@ -282,7 +290,7 @@ def eliminar_txt():
 
 if __name__ == "__main__":
 
-    download_dir = r"C:\Users\jvargas\Phyton\Descargar_Videos\descargas"
+    download_dir = r"C:\Users\jvargas\Phyton\Descargar_Animes\descargas"
 
     # URL de la página a analizar
     url = "https://inventarioncc.infinityfreeapp.com/Anime/Emision/?enviar=&accion=HOY"
