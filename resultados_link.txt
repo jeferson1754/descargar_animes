@@ -1,8 +1,0 @@
-"nombre": "Izure Saikyou no Renkinjutsushi? 4",
-"link_video": "https://tioanime.com/ver/izure-saikyou-no-renkinjutsushi-4",
-"link_descarga": "https://mega.nz/#!hLFxkBSS!15qnfpFDAQ_3hu_DCDwYKgVAGzQWvvkw60zCjgKiPyE"
-----------------------------------------
-"nombre": "Ishura 15",
-"link_video": "https://tioanime.com/ver/ishura-15",
-"link_descarga": "https://mega.nz/#!UTVHjISD!OEx_ugrQQKGkUPnk6XqwMWqjgSuZZlKoc113uQybPPI"
-----------------------------------------
