@@ -75,6 +75,105 @@ def leer_nombres_desde_txt(filename):
         return []
 
 
+def normalizar_nombre(nombre):
+    """
+    Normaliza el nombre del anime para que sea comparable con los nombres de archivo.
+    Elimina los espacios y caracteres no alfabéticos y convierte a minúsculas.
+
+    Args:
+        nombre (str): Nombre del anime a normalizar.
+
+    Returns:
+        str: Nombre normalizado del anime.
+    """
+    # Eliminar espacios, guiones, guiones bajos y convertir a minúsculas
+    nombre_normalizado = re.sub(r'[^a-zA-Z0-9]', '', nombre.lower())
+    return nombre_normalizado
+
+
+def obtener_archivos_descargados(download_dir):
+    """
+    Obtiene una lista de los archivos descargados en el directorio de descargas.
+
+    Args:
+        download_dir (str): Directorio de descargas.
+
+    Returns:
+        list: Lista de nombres de archivos en el directorio de descargas.
+    """
+    try:
+        archivos_descargados = os.listdir(download_dir)
+        archivos_mp4 = [
+            archivo for archivo in archivos_descargados if archivo.endswith(".mp4")]
+        return archivos_mp4
+    except FileNotFoundError:
+        print("El directorio de descargas no se encontró.")
+        return []
+
+
+def leer_nombres_animes_a_descargar(archivo_animes):
+    """
+    Lee los nombres de los animes a descargar desde un archivo.
+
+    Args:
+        archivo_animes (str): Nombre del archivo que contiene los animes a descargar.
+
+    Returns:
+        list: Lista de nombres de los animes.
+    """
+    try:
+        with open(archivo_animes, 'r', encoding='utf-8') as f:
+            animes = [linea.strip() for linea in f.readlines()]
+        return animes
+    except FileNotFoundError:
+        print(f"No se pudo encontrar el archivo {archivo_animes}.")
+        return []
+
+
+def comparar_descargas(animes_a_descargar, archivos_descargados):
+    """
+    Compara los animes a descargar con los archivos descargados para evitar duplicados.
+
+    Args:
+        animes_a_descargar (list): Lista de animes que se quieren descargar.
+        archivos_descargados (list): Lista de archivos ya descargados.
+
+    Returns:
+        list: Lista de animes que no han sido descargados.
+    """
+    animes_no_descargados = []
+    for anime in animes_a_descargar:
+        # Normalizar el nombre del anime a comparar
+        anime_normalizado = normalizar_nombre(anime)
+
+        # Comparar el nombre normalizado con los archivos descargados
+        encontrado = False
+        for archivo in archivos_descargados:
+            archivo_normalizado = normalizar_nombre(archivo)
+
+            # Si el nombre normalizado del anime está en el archivo descargado
+            if anime_normalizado in archivo_normalizado:
+                encontrado = True
+                break
+
+        if not encontrado:
+            animes_no_descargados.append(anime)
+
+    return animes_no_descargados
+
+
+def guardar_archivos_descargados(archivos, archivo_salida):
+    """
+    Guarda los nombres de los archivos descargados en un archivo de texto.
+
+    Args:
+        archivos (list): Lista de archivos a guardar.
+        archivo_salida (str): Nombre del archivo de salida donde se guardarán los nombres.
+    """
+    with open(archivo_salida, 'w', encoding='utf-8') as f:
+        for archivo in archivos:
+            f.write(archivo + "\n")
+
 
 def buscar_videos(url, nombres_videos):
     try:
@@ -85,6 +184,11 @@ def buscar_videos(url, nombres_videos):
 
         # Lista para almacenar los enlaces de los videos encontrados
         videos_encontrados = []
+
+        # Función para normalizar el nombre (eliminar caracteres especiales y convertir a minúsculas)
+        def normalizar_nombre(nombre):
+            # Eliminar caracteres especiales (como ':' o cualquier otro símbolo no alfanumérico)
+            return re.sub(r'[^a-zA-Z0-9\s]', '', nombre).lower()
 
         # Buscar todos los enlaces en la página
         for enlace in soup.find_all('a', href=True):
@@ -97,7 +201,11 @@ def buscar_videos(url, nombres_videos):
             # Verificar si el enlace pertenece al formato "https://tioanime.com/ver/(nombre_anime)"
             if "https://tioanime.com/ver/" in url_completa:
                 for nombre in nombres_videos:
-                    if nombre.lower() in texto.lower():  # Comparar ignorando mayúsculas y minúsculas
+                    # Normalizar tanto el nombre del anime como el texto del enlace
+                    nombre_normalizado = normalizar_nombre(nombre)
+                    texto_normalizado = normalizar_nombre(texto)
+
+                    if nombre_normalizado in texto_normalizado:  # Comparar ignorando mayúsculas y caracteres especiales
                         videos_encontrados.append({
                             'nombre': texto,
                             'enlace': url_completa
@@ -108,6 +216,7 @@ def buscar_videos(url, nombres_videos):
     except requests.exceptions.RequestException as e:
         print(f"Error al conectar con la página: {e}")
         return []
+
 
 def guardar_resultados_videos_txt(videos, filename):
     with open(filename, 'w', encoding='utf-8') as file:
@@ -120,6 +229,19 @@ def guardar_resultados_videos_txt(videos, filename):
             file.write(
                 f'"link_video": "{video["enlace"]}"\n')
             file.write("-" * 40 + "\n")
+
+
+def guardar_animes_no_descargados(animes_no_descargados, archivo_salida):
+    """
+    Guarda los animes que no han sido descargados en un archivo de texto.
+
+    Args:
+        animes_no_descargados (list): Lista de animes que no se han descargado.
+        archivo_salida (str): Nombre del archivo donde se guardarán los animes no descargados.
+    """
+    with open(archivo_salida, 'w', encoding='utf-8') as f:
+        for anime in animes_no_descargados:
+            f.write(anime + "\n")
 
 
 def leer_nombres_y_enlaces_desde_txt(filename):
@@ -288,6 +410,56 @@ def eliminar_txt():
         print("Eliminación cancelada.")
 
 
+def main(download_dir, archivo_animes, archivo_resultado_descargados, archivo_resultado_no_descargados):
+    """
+    Función principal que gestiona la verificación de los animes a descargar.
+
+    Args:
+        download_dir (str): Directorio de descargas.
+        archivo_animes (str): Archivo de animes a descargar.
+        archivo_resultado_descargados (str): Archivo donde se guardarán los archivos descargados.
+        archivo_resultado_no_descargados (str): Archivo donde se guardarán los animes no descargados.
+    """
+    # Obtener los archivos descargados
+    archivos_descargados = obtener_archivos_descargados(download_dir)
+
+    if not archivos_descargados:
+        print("No se encontraron archivos en el directorio de descargas.")
+        # Asegurar que el archivo de animes no descargados se crea
+        animes_a_descargar = leer_nombres_animes_a_descargar(archivo_animes)
+
+        if not animes_a_descargar:
+            print("No se encontraron animes para descargar.")
+            return
+
+        # Todos los animes en la lista de descargas se consideran no descargados
+        guardar_animes_no_descargados(animes_a_descargar, archivo_resultado_no_descargados)
+        print(f"Se ha creado el archivo {archivo_resultado_no_descargados} con todos los animes.")
+        return
+
+    # Guardar los archivos descargados en un archivo .txt
+    guardar_archivos_descargados(archivos_descargados, archivo_resultado_descargados)
+
+    # Leer los nombres de los animes a descargar
+    animes_a_descargar = leer_nombres_animes_a_descargar(archivo_animes)
+
+    if not animes_a_descargar:
+        print("No se encontraron animes para descargar.")
+        return
+
+    # Comparar los animes a descargar con los archivos ya descargados
+    animes_no_descargados = comparar_descargas(animes_a_descargar, archivos_descargados)
+
+    if not animes_no_descargados:
+        print("Todos los animes ya han sido descargados.")
+    else:
+        print("Animes que no han sido descargados:")
+        for anime in animes_no_descargados:
+            print(f"- {anime}")
+
+    # Guardar los animes no descargados en un archivo .txt
+    guardar_animes_no_descargados(animes_no_descargados, archivo_resultado_no_descargados)
+
 if __name__ == "__main__":
 
     download_dir = r"C:\Users\jvargas\Phyton\Descargar_Animes\descargas"
@@ -304,15 +476,24 @@ if __name__ == "__main__":
     # Mostrar conteo y los nombres en la consola
     conteo_anime = len(nombres_anime)
 
+    # Ruta de la carpeta de descargas y archivo de animes
+    archivo_animes = "resultados_anime.txt"
+    archivo_resultado = "archivos_descargados.txt"
+    archivo_resultado_descargados = "archivos_descargados.txt"
+    archivo_resultado_no_descargados = "animes_no_descargados.txt"
+
     print(f"Cantidad de animes extraídos: {conteo_anime}")
     for nombre in nombres_anime:
-        print(nombre)
+            print(nombre)
 
     print(f"Datos guardados en 'resultados_anime.txt'")
 
     # URL de la página web
     url_tioanime = "https://tioanime.com/"
 
-    flujo_descarga_animes("resultados_anime.txt", download_dir)
+    # Ejecutar la función principal
+    main(download_dir, archivo_animes, archivo_resultado_descargados, archivo_resultado_no_descargados)
+
+    flujo_descarga_animes(archivo_resultado_no_descargados, download_dir)
 
     eliminar_txt()
