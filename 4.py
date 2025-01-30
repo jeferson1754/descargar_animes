@@ -7,6 +7,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+import difflib
 import requests
 import time
 import re
@@ -188,7 +189,7 @@ def buscar_videos(url, nombres_videos):
         # Función para normalizar el nombre (eliminar caracteres especiales y convertir a minúsculas)
         def normalizar_nombre(nombre):
             # Eliminar caracteres especiales (como ':' o cualquier otro símbolo no alfanumérico)
-            return re.sub(r'[^a-zA-Z0-9\s]', '', nombre).lower()
+            return re.sub(r'\s*:\s*', ':', nombre).lower()
 
         # Buscar todos los enlaces en la página
         for enlace in soup.find_all('a', href=True):
@@ -205,12 +206,11 @@ def buscar_videos(url, nombres_videos):
                     nombre_normalizado = normalizar_nombre(nombre)
                     texto_normalizado = normalizar_nombre(texto)
 
-                    if nombre_normalizado in texto_normalizado:  # Comparar ignorando mayúsculas y caracteres especiales
-                        videos_encontrados.append({
-                            'nombre': texto,
-                            'enlace': url_completa
-                        })
-
+                    coincidencias = difflib.get_close_matches(nombre_normalizado, [texto_normalizado], n=1, cutoff=0.7)
+                    
+                    if coincidencias:
+                        videos_encontrados.append({'nombre': texto, 'enlace': url_completa})
+                        
         return videos_encontrados
 
     except requests.exceptions.RequestException as e:
@@ -433,12 +433,15 @@ def main(download_dir, archivo_animes, archivo_resultado_descargados, archivo_re
             return
 
         # Todos los animes en la lista de descargas se consideran no descargados
-        guardar_animes_no_descargados(animes_a_descargar, archivo_resultado_no_descargados)
-        print(f"Se ha creado el archivo {archivo_resultado_no_descargados} con todos los animes.")
+        guardar_animes_no_descargados(
+            animes_a_descargar, archivo_resultado_no_descargados)
+        print(f"Se ha creado el archivo {
+              archivo_resultado_no_descargados} con todos los animes.")
         return
 
     # Guardar los archivos descargados en un archivo .txt
-    guardar_archivos_descargados(archivos_descargados, archivo_resultado_descargados)
+    guardar_archivos_descargados(
+        archivos_descargados, archivo_resultado_descargados)
 
     # Leer los nombres de los animes a descargar
     animes_a_descargar = leer_nombres_animes_a_descargar(archivo_animes)
@@ -448,7 +451,8 @@ def main(download_dir, archivo_animes, archivo_resultado_descargados, archivo_re
         return
 
     # Comparar los animes a descargar con los archivos ya descargados
-    animes_no_descargados = comparar_descargas(animes_a_descargar, archivos_descargados)
+    animes_no_descargados = comparar_descargas(
+        animes_a_descargar, archivos_descargados)
 
     if not animes_no_descargados:
         print("Todos los animes ya han sido descargados.")
@@ -458,7 +462,9 @@ def main(download_dir, archivo_animes, archivo_resultado_descargados, archivo_re
             print(f"- {anime}")
 
     # Guardar los animes no descargados en un archivo .txt
-    guardar_animes_no_descargados(animes_no_descargados, archivo_resultado_no_descargados)
+    guardar_animes_no_descargados(
+        animes_no_descargados, archivo_resultado_no_descargados)
+
 
 if __name__ == "__main__":
 
@@ -484,7 +490,7 @@ if __name__ == "__main__":
 
     print(f"Cantidad de animes extraídos: {conteo_anime}")
     for nombre in nombres_anime:
-            print(nombre)
+        print(nombre)
 
     print(f"Datos guardados en 'resultados_anime.txt'")
 
@@ -492,7 +498,8 @@ if __name__ == "__main__":
     url_tioanime = "https://tioanime.com/"
 
     # Ejecutar la función principal
-    main(download_dir, archivo_animes, archivo_resultado_descargados, archivo_resultado_no_descargados)
+    main(download_dir, archivo_animes, archivo_resultado_descargados,
+         archivo_resultado_no_descargados)
 
     flujo_descarga_animes(archivo_resultado_no_descargados, download_dir)
 
