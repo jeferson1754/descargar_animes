@@ -377,9 +377,9 @@ def hacer_click_en_boton_descarga(driver, enlace_descarga, download_dir, nombre_
 
 
 def verificar_archivo_reciente(download_dir, nombre_video):
-    print("Esperando pacientemente durante un minuto...")
-    time.sleep(60)  # Espera durante 1 minuto
-    print("¡Un minuto ha pasado! Ahora, podemos continuar con lo que necesites.")
+    print("Esperando pacientemente durante dos minutos...")
+    time.sleep(120)  # Espera durante 1 minuto
+    print("¡Dos minutos han pasado! Ahora, podemos continuar con lo que necesites.")
 
 
 def eliminar_txt():
