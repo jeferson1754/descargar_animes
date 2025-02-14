@@ -4,12 +4,10 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 import time
-import re
 
 
 def configurar_navegador():
     chrome_options = Options()
-    # Ejecuta en modo sin interfaz gráfica
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -22,17 +20,23 @@ def configurar_navegador():
 def obtener_enlaces_principales(url):
     driver = configurar_navegador()
     driver.get(url)
-    time.sleep(3)  # Esperar carga de la página
 
-    # Obtener enlaces de manga y verificación
+    # Esperar a que cargue la página
+    time.sleep(3)
+
+    # Obtener todos los enlaces con clase "link" (manga)
     enlaces_manga = driver.find_elements(By.CSS_SELECTOR, "a.link")
+
+    # Obtener todos los enlaces con clase "chart" (verificación)
     enlaces_verificacion = driver.find_elements(By.CSS_SELECTOR, "a.chart")
 
+    # Validar que existan enlaces
     if not enlaces_manga:
         print("No se encontraron enlaces de manga.")
     if not enlaces_verificacion:
         print("No se encontraron enlaces de verificación.")
 
+    # Recorrer los enlaces con un while
     index = 0
     while index < max(len(enlaces_manga), len(enlaces_verificacion)):
         manga = enlaces_manga[index].get_attribute(
@@ -40,44 +44,11 @@ def obtener_enlaces_principales(url):
         verificacion = enlaces_verificacion[index].get_attribute(
             "href") if index < len(enlaces_verificacion) else "No disponible"
 
-        print(f"\n[{index + 1}] Enlace del Manga: {manga}")
+        print(f"[{index + 1}] Enlace del Manga: {manga}")
         print(f"[{index + 1}] Enlace de Verificación: {verificacion}")
-
-        if manga and manga != "No disponible":
-            extraer_fechas_manga(manga)
-
         print("-" * 50)
+
         index += 1
-
-    driver.quit()
-
-
-def extraer_fechas_manga(manga_url):
-    """Ingresa al enlace del manga y extrae las últimas 10 fechas de los <span> con clase 'badge badge-primary p-2'."""
-    driver = configurar_navegador()
-    driver.get(manga_url)
-    time.sleep(3)  # Esperar carga de la página
-
-    spans = driver.find_elements(
-        By.CSS_SELECTOR, "span.badge.badge-primary.p-2")
-
-    fechas = []
-    for span in spans:
-        texto = span.text.strip()  # Obtener el texto dentro del span
-        # Buscar la fecha con regex
-        fecha_match = re.search(r"\d{4}-\d{2}-\d{2}", texto)
-        if fecha_match:
-            fechas.append(fecha_match.group())  # Guardar la fecha encontrada
-
-    # Mostrar solo las últimas 10 fechas
-    ultimas_fechas = fechas[-10:] if len(fechas) > 10 else fechas
-
-    if ultimas_fechas:
-        print("Últimas 10 fechas extraídas:")
-        for i, fecha in enumerate(ultimas_fechas, start=1):
-            print(f" - [{i}] {fecha}")
-    else:
-        print("No se encontraron fechas en los <span>.")
 
     driver.quit()
 

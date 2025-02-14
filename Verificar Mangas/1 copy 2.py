@@ -3,8 +3,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 import time
 import re
 
@@ -12,7 +10,7 @@ import re
 def configurar_navegador():
     chrome_options = Options()
     # Ejecuta en modo sin interfaz gráfica
-    chrome_options.add_argument("--headless")
+    #chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=800,600")
@@ -53,58 +51,51 @@ def obtener_enlaces_principales(url):
 
     driver.quit()
 
+
 def extraer_fechas_manga(manga_url):
-    """Abre los botones uno por uno con un lapso de 10 segundos entre cada clic y extrae todas las fechas.
-       Permite al usuario decidir si continuar o no después de cada paso."""
+    """Ingresa al enlace del manga y extrae las últimas 10 fechas de los <span> con clase 'badge badge-primary p-2'."""
     driver = configurar_navegador()
     driver.get(manga_url)
     time.sleep(3)  # Esperar carga de la página
 
-    # Buscar todos los botones con la clase 'btn-collapse'
+    # Buscar todos los enlaces con la clase 'btn-collapse'
     botones = driver.find_elements(By.CLASS_NAME, "btn-collapse")
-    
-    if botones:
-        fechas = []  # Lista para almacenar las fechas extraídas
-        for index, boton in enumerate(botones, start=1):
-            try:
-                print(f"Paso {index}: Haciendo clic en el botón '{boton.text.strip()}'...") 
-                
-                # Mostrar el proceso y esperar decisión del usuario
-                continuar = input("¿Quieres continuar con el siguiente paso? (s/n): ")
-                if continuar.lower() != 's':
-                    print("Proceso detenido por el usuario.")
-                    break
 
+    # Asegúrate de que hay al menos 2 botones
+    if len(botones) >= 2:
+        fechas = []  # Lista para almacenar las fechas extraídas
+        for i in range(2):  # Solo los dos primeros botones
+            try:
                 # Hacer clic en el botón
-                boton.click()
-                time.sleep(10)  # Esperar 10 segundos entre clics para cargar la información
-                
-                # Esperar explícitamente hasta que los spans estén disponibles
-                WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "span.badge.badge-primary.p-2")))
+                botones[i].click()
+                time.sleep(2)  # Esperar a que se despliegue la información
 
                 # Extraer las fechas de los elementos 'span' con clase 'badge badge-primary p-2'
-                spans = driver.find_elements(By.CSS_SELECTOR, "span.badge.badge-primary.p-2")
-                
+                spans = driver.find_elements(
+                    By.CSS_SELECTOR, "span.badge.badge-primary.p-2")
+
                 for span in spans:
                     texto = span.text.strip()  # Obtener el texto dentro del span
                     # Buscar la fecha con regex
                     fecha_match = re.search(r"\d{4}-\d{2}-\d{2}", texto)
                     if fecha_match:
-                        fechas.append(fecha_match.group())  # Guardar la fecha encontrada
+                        # Guardar la fecha encontrada
+                        fechas.append(fecha_match.group())
             except Exception as e:
                 print(f"Error al intentar hacer clic o extraer fechas: {e}")
+        # Mostrar solo las últimas 10 fechas
+        ultimas_fechas = fechas[-10:] if len(fechas) > 10 else fechas
 
-        # Mostrar todas las fechas extraídas
-        if fechas:
-            print("\nFechas extraídas:")
-            for i, fecha in enumerate(fechas, start=1):
+        if ultimas_fechas:
+            print("Últimas 10 fechas extraídas:")
+            for i, fecha in enumerate(ultimas_fechas, start=1):
                 print(f" - [{i}] {fecha}")
         else:
             print("No se encontraron fechas en los <span>.")
-    else:
-        print("No se encontraron botones disponibles.")
 
-    driver.quit()
+    else:
+        print("No se encontraron suficientes botones para hacer clic.")
+
 
 
 

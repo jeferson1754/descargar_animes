@@ -3,8 +3,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 import time
 import re
 
@@ -53,9 +51,9 @@ def obtener_enlaces_principales(url):
 
     driver.quit()
 
+
 def extraer_fechas_manga(manga_url):
-    """Abre los botones uno por uno con un lapso de 10 segundos entre cada clic y extrae todas las fechas.
-       Permite al usuario decidir si continuar o no después de cada paso."""
+    """Abre los botones uno por uno con un lapso de 10 segundos entre cada clic y extrae todas las fechas."""
     driver = configurar_navegador()
     driver.get(manga_url)
     time.sleep(3)  # Esperar carga de la página
@@ -65,23 +63,12 @@ def extraer_fechas_manga(manga_url):
     
     if botones:
         fechas = []  # Lista para almacenar las fechas extraídas
-        for index, boton in enumerate(botones, start=1):
+        for boton in botones:
             try:
-                print(f"Paso {index}: Haciendo clic en el botón '{boton.text.strip()}'...") 
-                
-                # Mostrar el proceso y esperar decisión del usuario
-                continuar = input("¿Quieres continuar con el siguiente paso? (s/n): ")
-                if continuar.lower() != 's':
-                    print("Proceso detenido por el usuario.")
-                    break
-
                 # Hacer clic en el botón
                 boton.click()
                 time.sleep(10)  # Esperar 10 segundos entre clics para cargar la información
                 
-                # Esperar explícitamente hasta que los spans estén disponibles
-                WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "span.badge.badge-primary.p-2")))
-
                 # Extraer las fechas de los elementos 'span' con clase 'badge badge-primary p-2'
                 spans = driver.find_elements(By.CSS_SELECTOR, "span.badge.badge-primary.p-2")
                 
@@ -96,7 +83,7 @@ def extraer_fechas_manga(manga_url):
 
         # Mostrar todas las fechas extraídas
         if fechas:
-            print("\nFechas extraídas:")
+            print("Fechas extraídas:")
             for i, fecha in enumerate(fechas, start=1):
                 print(f" - [{i}] {fecha}")
         else:
@@ -105,6 +92,7 @@ def extraer_fechas_manga(manga_url):
         print("No se encontraron botones disponibles.")
 
     driver.quit()
+
 
 
 
