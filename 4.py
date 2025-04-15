@@ -15,29 +15,30 @@ import os
 
 
 def configurar_navegador(download_dir):
-    # Configurar opciones de Chrome
     chrome_options = Options()
 
     prefs = {
-        # Ruta donde se guardarán los archivos descargados
         "download.default_directory": download_dir,
-        # Desactiva el aviso de confirmación de descarga
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
-        "safebrowsing.enabled": True  # Asegura que no se bloqueen descargas
+        "safebrowsing.enabled": True
     }
 
     chrome_options.add_experimental_option("prefs", prefs)
 
-    # Ejecuta en modo headless (sin interfaz gráfica)
-    chrome_options.add_argument("--headless")
+    # Ignorar errores SSL
+    chrome_options.add_argument('--ignore-certificate-errors')
+    chrome_options.add_argument('--allow-insecure-localhost')
+    chrome_options.add_argument('--ignore-ssl-errors=yes')
+
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=800,600")
+    chrome_options.add_argument("--headless")  # si lo deseas sin interfaz
 
-    # Iniciar el navegador
     service = Service(ChromeDriverManager().install())
     return webdriver.Chrome(service=service, options=chrome_options)
+
 
 
 def extraer_nombres_anime(url, download_dir):
