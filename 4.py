@@ -40,7 +40,6 @@ def configurar_navegador(download_dir):
     return webdriver.Chrome(service=service, options=chrome_options)
 
 
-
 def extraer_nombres_anime(url, download_dir):
     driver = configurar_navegador(download_dir)
     driver.get(url)
@@ -207,11 +206,13 @@ def buscar_videos(url, nombres_videos):
                     nombre_normalizado = normalizar_nombre(nombre)
                     texto_normalizado = normalizar_nombre(texto)
 
-                    coincidencias = difflib.get_close_matches(nombre_normalizado, [texto_normalizado], n=1, cutoff=0.7)
-                    
+                    coincidencias = difflib.get_close_matches(
+                        nombre_normalizado, [texto_normalizado], n=1, cutoff=0.7)
+
                     if coincidencias:
-                        videos_encontrados.append({'nombre': texto, 'enlace': url_completa})
-                        
+                        videos_encontrados.append(
+                            {'nombre': texto, 'enlace': url_completa})
+
         return videos_encontrados
 
     except requests.exceptions.RequestException as e:
@@ -467,12 +468,74 @@ def main(download_dir, archivo_animes, archivo_resultado_descargados, archivo_re
         animes_no_descargados, archivo_resultado_no_descargados)
 
 
-if __name__ == "__main__":
+def menu_dias():
+    dias = {
+        "1": "Lunes",
+        "2": "Martes",
+        "3": "Miércoles",
+        "4": "Jueves",
+        "5": "Viernes",
+        "6": "Sábado",
+        "7": "Domingo",
+        "0": "Volver al menú principal"
+    }
+
+    while True:
+        print("\n=== Seleccione un día ===")
+        for clave, dia in dias.items():
+            print(f"{clave}. {dia}")
+
+        opcion_dia = input("Seleccione un día: ")
+
+        if opcion_dia in dias:
+            if opcion_dia == "0":
+                return None  # Volver al menú principal
+            else:
+                dia_seleccionado = dias[opcion_dia]
+                # Construir URL con el día seleccionado
+                url = f"https://inventarioncc.infinityfreeapp.com/Anime/Emision/?dias={dia_seleccionado}&enviar2=&accion=Filtro"
+                return url
+        else:
+            print("❌ Opción inválida. Intente de nuevo.")
+
+
+def menu_principal():
+    while True:
+        print("\n=== MENÚ DE OPCIONES ===")
+        print("1. Descargar animes de hoy")
+        print("2. Descargar animes pendientes")
+        print("3. Seleccionar un día")
+        print("0. Salir")
+
+        opcion = input("Seleccione una opción: ")
+
+        if opcion == "1":
+            url = "https://inventarioncc.infinityfreeapp.com/Anime/Emision/?enviar=&accion=HOY"
+            return url
+        elif opcion == "2":
+            url = "https://inventarioncc.infinityfreeapp.com/Anime/Emision/?faltantes=&accion=HOY"
+            return url
+        elif opcion == "3":
+            url = menu_dias()
+            if url:
+                return url
+        elif opcion == "0":
+            print("Saliendo del programa...")
+            return None
+        else:
+            print("❌ Opción inválida. Intente de nuevo.")
+
+
+def menu():
 
     download_dir = r"C:\Users\jvargas\Phyton\Descargar_Animes\descargas"
+    # download_dir = r"C:\Users\jvargas\Phyton\Descargar_Animes\descargas"
 
     # URL de la página a analizar
-    url = "https://inventarioncc.infinityfreeapp.com/Anime/Emision/?enviar=&accion=HOY"
+    url = menu_principal()
+    
+    if url is None:
+        print("No se seleccionó ninguna opción válida. Volviendo al menú principal...")
 
     # Extraer y mostrar los nombres de los animes
     nombres_anime = extraer_nombres_anime(url, download_dir)
@@ -495,13 +558,22 @@ if __name__ == "__main__":
 
     print(f"Datos guardados en 'resultados_anime.txt'")
 
-    # URL de la página web
-    url_tioanime = "https://tioanime.com/"
-
     # Ejecutar la función principal
     main(download_dir, archivo_animes, archivo_resultado_descargados,
          archivo_resultado_no_descargados)
 
-    flujo_descarga_animes(archivo_resultado_no_descargados, download_dir)
+    # Ejecutar función principal solo si hay animes por descargar
+    if not os.path.exists(archivo_resultado_no_descargados) or os.path.getsize(archivo_resultado_no_descargados) == 0:
+        print("No se ejecuta la funcion buscar videos de anime")
+    else:
+        flujo_descarga_animes(archivo_resultado_no_descargados, download_dir)
 
     eliminar_txt()
+
+
+if __name__ == "__main__":
+
+    # URL de la página web
+    url_tioanime = "https://tioanime.com/"
+
+    menu()
