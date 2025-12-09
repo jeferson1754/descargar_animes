@@ -1,2 +1,4 @@
 # Ignorar todos los archivos .mp4 en la carpeta descargas
-descargas/*.mp4
+/descargas/
+
+

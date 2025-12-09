@@ -352,7 +352,6 @@ def buscar_videos(url, nombres_videos):
 
 
 def guardar_resultados_videos_txt(videos, filename):
-    """Guarda los detalles de los videos, incluyendo el enlace de descarga, en un archivo de texto."""
     with open(filename, 'w', encoding='utf-8') as file:
         # Escribir el conteo de videos encontrados
         file.write(f"Cantidad de videos encontrados: {len(videos)}\n\n")
@@ -361,28 +360,8 @@ def guardar_resultados_videos_txt(videos, filename):
         for video in videos:
             file.write(f'"nombre": "{video["nombre"]}",\n')
             file.write(
-                f'"link_descarga": "{video.get("link_descarga", "N/A")}"\n')
+                f'"link_video": "{video["enlace"]}"\n')
             file.write("-" * 40 + "\n")
-
-
-def buscar_enlace_descarga_y_actualizar(driver, videos_encontrados):
-    """Busca el enlace de descarga (Mega) para cada video y lo agrega a la lista."""
-
-    videos_con_descarga = []
-
-    for video in videos_encontrados:
-
-        # Reutilizamos la lógica de buscar_boton_descarga pero sin hacer clic aún
-        enlace_descarga = buscar_boton_descarga(driver, video['enlace'])
-
-        if enlace_descarga:
-            video['link_descarga'] = enlace_descarga
-        else:
-            video['link_descarga'] = "No encontrado"
-
-        videos_con_descarga.append(video)
-
-    return videos_con_descarga
 
 
 def guardar_animes_no_descargados(animes_no_descargados, archivo_salida):
@@ -460,10 +439,10 @@ def buscar_boton_descarga(driver, video_url):
 
 
 def flujo_descarga_animes(file_name, download_dir):
-    # Leer los videos desde el archivo .txt (solo nombres de animes)
+    # Leer los videos desde el archivo .txt
     nombres_animes = leer_nombres_desde_txt(file_name)
 
-    # Paso 1: Buscar videos relacionados con los animes
+    # Paso 3: Buscar videos relacionados con los animes
     print("Buscando videos relacionados...")
     videos_encontrados = buscar_videos(url_tioanime, nombres_animes)
 
@@ -471,56 +450,34 @@ def flujo_descarga_animes(file_name, download_dir):
         print("No se encontraron videos para los animes indicados.")
         return
 
-    # Iniciar el navegador para buscar los enlaces de descarga
-    driver = configurar_navegador(download_dir)
+    # Paso 4: Guardar resultados de videos encontrados
+    guardar_resultados_videos_txt(videos_encontrados, "resultados_videos.txt")
 
-    # Paso 2: Buscar los enlaces de descarga de Mega y actualizar la lista
-    videos_finales = buscar_enlace_descarga_y_actualizar(
-        driver, videos_encontrados)
+    videos_animes = leer_nombres_desde_txt("resultados_videos.txt")
 
-    # Cerra el driver después de obtener los enlaces de Mega
-    driver.quit()
-
-    # Paso 3: Guardar resultados de videos encontrados (ahora con el link de descarga)
-    guardar_resultados_videos_txt(
-        videos_finales, "resultados_videos_con_descarga.txt")
-
-    # Paso 4: Mostrar la información completa antes de preguntar
-
-    # Formatear la lista de animes con los nuevos detalles para la confirmación
-    videos_para_mostrar = []
-    for video in videos_finales:
-        # Crea una cadena legible que incluye el link de descarga
-        detalles = (
-            f'"nombre": "{video["nombre"]}",\n'
-            f'"link_video": "{video["enlace"]}"\n'
-            f'"link_descarga": "{video["link_descarga"]}"\n' # Agregada '\n' aquí
-            + "-" * 40 + "\n" # Agregado el signo '+'
-        )
-        videos_para_mostrar.append(detalles)
-
-    if not videos_para_mostrar:
-        print("No se encontraron detalles completos de los animes para descargar.")
+    if not videos_animes:
+        print("No se encontraron nombres de animes para descargar.")
         return
 
-    # Paso 5: Confirmar si el usuario quiere descargar
-    if not confirmar_descarga(videos_para_mostrar):
+    # Paso 2: Confirmar si el usuario quiere descargar
+    if not confirmar_descarga(videos_animes):
         return  # Salir si el usuario no quiere proceder
 
-    # Si el usuario confirma, volvemos a abrir el navegador para iniciar las descargas.
-    # Nota: Si el enlace de Mega es directo, podrías usar 'requests' para descargar,
-    # pero el flujo original usaba Selenium, así que lo mantenemos.
-    # Reabrir driver para la descarga
+    # Iniciar el navegador
     driver = configurar_navegador(download_dir)
 
-    for video in videos_finales:
-        if video['link_descarga'] and video['link_descarga'] != "No encontrado":
-            # Usamos el enlace de descarga de Mega encontrado previamente
+    # Buscar los botones de descarga para cada video
+    for video in videos_encontrados:
+        print(f"Buscando enlace de descarga para: {video['nombre']}")
+        enlace_descarga = buscar_boton_descarga(
+            driver, f"{video['enlace']}")
+        if enlace_descarga:
+            print(f"Descargando: {video['nombre']}...")
             hacer_click_en_boton_descarga(
-                driver, video['link_descarga'], download_dir, video['nombre'])
+                driver, enlace_descarga, download_dir, video['nombre'])
         else:
-            print(
-                f"Saltando descarga de {video['nombre']}: Enlace no disponible.")
+            print(f"No se pudo encontrar el enlace de descarga para {
+                  video['nombre']}.")
 
     driver.quit()
     print("Descargas completadas.")
