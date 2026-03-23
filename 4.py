@@ -43,14 +43,8 @@ def configurar_navegador(download_dir):
 
     # Lista de versiones de ChromeDriver a probar (de más nueva a más vieja)
     versiones_a_probar = [
-        "142.0.7444.135",  # Versión más reciente
-        "139.0.2171.71",
-        "138.0.7204.97",  # Versiones recientes
-        "137.0.6962.70",
-        "135.0.7035.122",  # Versiones anteriores como respaldo
-        "134.0.6847.140",
-        "133.0.6835.106",
-        "132.0.6834.110"
+        "146.0.7680.153",
+        "144.0.7559.97"
     ]
 
     # Intentar cada versión hasta encontrar una que funcione
@@ -494,8 +488,9 @@ def flujo_descarga_animes(file_name, download_dir):
         detalles = (
             f'"nombre": "{video["nombre"]}",\n'
             f'"link_video": "{video["enlace"]}"\n'
-            f'"link_descarga": "{video["link_descarga"]}"\n' # Agregada '\n' aquí
-            + "-" * 40 + "\n" # Agregado el signo '+'
+            # Agregada '\n' aquí
+            f'"link_descarga": "{video["link_descarga"]}"\n'
+            + "-" * 40 + "\n"  # Agregado el signo '+'
         )
         videos_para_mostrar.append(detalles)
 
