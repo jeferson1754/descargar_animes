@@ -1,3 +1,4 @@
+import shutil
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
@@ -12,6 +13,7 @@ import requests
 import time
 import re
 import os
+import shutil
 
 
 def configurar_navegador(download_dir):
@@ -547,6 +549,55 @@ def hacer_click_en_boton_descarga(driver, enlace_descarga, download_dir, nombre_
               enlace_descarga}: {e}")
 
 
+def mover_videos_y_limpiar_carpetas(directorio_origen, directorio_destino):
+    """
+    Mueve todos los videos encontrados en subcarpetas al directorio_destino
+    y elimina las carpetas de origen que hayan quedado vacías.
+    """
+    extensiones_video = ('.mp4', '.mkv', '.avi', '.mov', '.wmv')
+
+    if not os.path.exists(directorio_destino):
+        os.makedirs(directorio_destino)
+
+    # 1. Mover los archivos
+    print("--- Moviendo archivos ---")
+    for root, dirs, files in os.walk(directorio_origen):
+        # Evitar procesar el mismo directorio destino si está dentro del origen
+        if os.path.abspath(root) == os.path.abspath(directorio_destino):
+            continue
+
+        for file in files:
+            if file.lower().endswith(extensiones_video):
+                origen = os.path.join(root, file)
+                destino = os.path.join(directorio_destino, file)
+
+                if not os.path.exists(destino):
+                    shutil.move(origen, destino)
+                    print(f"✅ Movido: {file}")
+                else:
+                    print(f"⚠️ Ya existe: {file}")
+
+    # 2. Eliminar carpetas vacías
+    # Usamos topdown=False para eliminar subcarpetas antes que la carpeta padre
+    print("\n--- Limpiando carpetas vacías ---")
+    for root, dirs, files in os.walk(directorio_origen, topdown=False):
+        # No borrar el directorio raíz de origen ni el directorio destino
+        if os.path.abspath(root) == os.path.abspath(directorio_origen):
+            continue
+        if os.path.abspath(root) == os.path.abspath(directorio_destino):
+            continue
+
+        # Si la carpeta está vacía, borrarla
+        if not os.listdir(root):
+            try:
+                os.rmdir(root)
+                print(f"🗑️ Carpeta eliminada: {root}")
+            except OSError as e:
+                print(f"❌ No se pudo borrar {root}: {e}")
+
+    print("\nProceso completado.")
+
+
 def verificar_archivo_reciente(download_dir, nombre_video):
     print("Esperando pacientemente durante dos minutos...")
     time.sleep(120)  # Espera durante 1 minuto
@@ -591,6 +642,9 @@ def main(download_dir, archivo_animes, archivo_resultado_descargados, archivo_re
         archivo_resultado_descargados (str): Archivo donde se guardarán los archivos descargados.
         archivo_resultado_no_descargados (str): Archivo donde se guardarán los animes no descargados.
     """
+
+    mover_videos_y_limpiar_carpetas(download_dir, download_dir)
+
     # Obtener los archivos descargados
     archivos_descargados = obtener_archivos_descargados(download_dir)
 
