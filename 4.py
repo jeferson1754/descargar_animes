@@ -751,9 +751,10 @@ def menu_principal():
 
 def menu():
 
-    download_dir = r"C:\Users\jvargas\Phyton\Descargar_Animes\descargas"
+    download_dir = r"D:\Xampp\htdocs\descargar_animes\Descargas"
     # download_dir = r"C:\Users\jvargas\Phyton\Descargar_Animes\descargas"
-
+    #download_dir = r"D:\Xampp\htdocs\descargar_animes\Descargas"
+    
     # URL de la página a analizar
     url = menu_principal()
 

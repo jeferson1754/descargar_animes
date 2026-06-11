@@ -1,5 +1,7 @@
 # Ignorar todos los archivos .mp4 en la carpeta descargas
 descargas/*
-animes_no_descargados.txt
-resultados_anime.txt
-archivos_no_descargados.txt
+# Ignorar todos los archivos .txt
+*.txt
+
+# Exceptuar requirements.txt
+!requirements.txt
