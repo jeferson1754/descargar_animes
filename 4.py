@@ -722,13 +722,13 @@ def menu_dias():
             print("❌ Opción inválida. Intente de nuevo.")
 
 
-def menu_principal():
+def menu_principal(download_dir):
     while True:
         print("\n=== MENÚ DE OPCIONES ===")
         print("1. Descargar animes de hoy")
         print("2. Descargar animes pendientes")
         print("3. Seleccionar un día")
-        print("0. Salir")
+        print("4. Sacar videos de carpetas de descargas")
 
         opcion = input("Seleccione una opción: ")
 
@@ -742,9 +742,8 @@ def menu_principal():
             url = menu_dias()
             if url:
                 return url
-        elif opcion == "0":
-            print("Saliendo del programa...")
-            return None
+        elif opcion == "4":
+            mover_videos_y_limpiar_carpetas(download_dir, download_dir)
         else:
             print("❌ Opción inválida. Intente de nuevo.")
 
@@ -752,14 +751,15 @@ def menu_principal():
 def menu():
 
     download_dir = r"D:\Xampp\htdocs\descargar_animes\Descargas"
-    # download_dir = r"C:\Users\jvargas\Phyton\Descargar_Animes\descargas"
+    #download_dir = r"C:\Users\jvargas\Phyton\Descargar_Animes\descargas"
     #download_dir = r"D:\Xampp\htdocs\descargar_animes\Descargas"
     
     # URL de la página a analizar
-    url = menu_principal()
+    url = menu_principal(download_dir)
 
-    if url is None:
+    if url is None or url == "":
         print("No se seleccionó ninguna opción válida. Volviendo al menú principal...")
+        menu()
 
     # Extraer y mostrar los nombres de los animes
     nombres_anime = extraer_nombres_anime(url, download_dir)
