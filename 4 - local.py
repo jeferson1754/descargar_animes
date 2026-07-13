@@ -43,7 +43,6 @@ def configurar_navegador(download_dir):
         "safebrowsing.enabled": True
     })
 
-    '''
     # Lista de versiones de ChromeDriver a probar (de más nueva a más vieja)
     versiones_a_probar = [
         "146.0.7680.153",
@@ -67,16 +66,7 @@ def configurar_navegador(download_dir):
         except Exception as e:
             print(f"✗ ChromeDriver {version} falló: {str(e)[:100]}...")
             continue
-    '''
-
-    # Si ninguna versión funciona, usar webdriver-manager automático
-    try:
-        print("Intentando con detección automática de versión...")
-        driver_path = ChromeDriverManager().install()
-        service = Service(executable_path=r"C:\chromedriver.exe")
-        return webdriver.Chrome(service=service, options=chrome_options)
-    except Exception as e:
-        print(f"Error final: {e}")
+    
 
 
 def obtener_version_chrome():
@@ -175,21 +165,21 @@ def extraer_nombres_anime(url, download_dir):
     driver.get(url)
 
     # Espera que la página se cargue
-    time.sleep(5)
+    time.sleep(5) 
 
     # Buscar todas las celdas con la clase "fw-500"
     elementos = driver.find_elements(By.CSS_SELECTOR, "td.fw-500")
 
     nombres_limpios = []
-
+    
     for elemento in elementos:
-        # Usamos JavaScript para obtener SOLO el texto del nodo raíz,
+        # Usamos JavaScript para obtener SOLO el texto del nodo raíz, 
         # ignorando los textos de los elementos hijos (como el span del badge)
         nombre = driver.execute_script(
-            "return arguments[0].childNodes[0].textContent.trim();",
+            "return arguments[0].childNodes[0].textContent.trim();", 
             elemento
         )
-
+        
         if nombre:
             nombres_limpios.append(nombre)
 
