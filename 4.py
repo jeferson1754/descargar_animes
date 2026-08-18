@@ -43,7 +43,6 @@ def configurar_navegador(download_dir):
         "safebrowsing.enabled": True
     })
 
-    
     # Lista de versiones de ChromeDriver a probar (de más nueva a más vieja)
     versiones_a_probar = [
         "151.0.7922.137",
@@ -65,7 +64,7 @@ def configurar_navegador(download_dir):
         except Exception as e:
             print(f"✗ ChromeDriver {version} falló: {str(e)[:100]}...")
             continue
-    
+
     # Si ninguna versión funciona, usar webdriver-manager automático
     try:
         print("Intentando con detección automática de versión...")
@@ -313,11 +312,36 @@ def guardar_archivos_descargados(archivos, archivo_salida):
             f.write(archivo + "\n")
 
 
-def buscar_videos(url, nombres_videos):
+def buscar_videos(url, nombres_videos, max_intentos=3):
+    """
+    Busca videos en la página web con un sistema de reintentos en caso de fallo de conexión.
+    """
+    intentos = 0
+
+    while intentos < max_intentos:
+        try:
+            # Intentar obtener el contenido de la página web
+            # Añadido timeout para evitar bloqueos largos
+            respuesta = requests.get(url, timeout=10)
+            respuesta.raise_for_status()  # Verifica si la solicitud fue exitosa
+
+            # Si la conexión es exitosa, rompemos el bucle de reintentos
+            break
+
+        except requests.exceptions.RequestException as e:
+            intentos += 1
+            print(
+                f"⚠️ Error al conectar con la página (Intento {intentos}/{max_intentos}): {e}")
+
+            if intentos < max_intentos:
+                print("🔄 Reintentando en 3 segundos...")
+                time.sleep(3)
+            else:
+                print("❌ Se agotaron los reintentos. No se pudo conectar con la página.")
+                return []
+
+    # Si pasamos los intentos con éxito, procesamos el contenido con BeautifulSoup
     try:
-        # Obtener el contenido de la página web
-        respuesta = requests.get(url)
-        respuesta.raise_for_status()  # Verifica si la solicitud fue exitosa
         soup = BeautifulSoup(respuesta.text, 'html.parser')
 
         # Lista para almacenar los enlaces de los videos encontrados
@@ -325,7 +349,6 @@ def buscar_videos(url, nombres_videos):
 
         # Función para normalizar el nombre (eliminar caracteres especiales y convertir a minúsculas)
         def normalizar_nombre(nombre):
-            # Eliminar caracteres especiales (como ':' o cualquier otro símbolo no alfanumérico)
             return re.sub(r'\s*:\s*', ':', nombre).lower()
 
         # Buscar todos los enlaces en la página
@@ -347,13 +370,15 @@ def buscar_videos(url, nombres_videos):
                         nombre_normalizado, [texto_normalizado], n=1, cutoff=0.7)
 
                     if coincidencias:
-                        videos_encontrados.append(
-                            {'nombre': texto, 'enlace': url_completa})
+                        # Evitar duplicados si un anime ya fue agregado
+                        nuevo_video = {'nombre': texto, 'enlace': url_completa}
+                        if nuevo_video not in videos_encontrados:
+                            videos_encontrados.append(nuevo_video)
 
         return videos_encontrados
 
-    except requests.exceptions.RequestException as e:
-        print(f"Error al conectar con la página: {e}")
+    except Exception as e:
+        print(f"❌ Error al procesar el contenido HTML: {e}")
         return []
 
 
@@ -512,7 +537,7 @@ def flujo_descarga_animes(file_name, download_dir):
 
     # Paso 5: Confirmar si el usuario quiere descargar
     if not confirmar_descarga(videos_para_mostrar):
-        return False # Asegúrate de retornar False aquí
+        return False  # Asegúrate de retornar False aquí
 
     # Si el usuario confirma, volvemos a abrir el navegador para iniciar las descargas.
     # Nota: Si el enlace de Mega es directo, podrías usar 'requests' para descargar,
@@ -641,17 +666,20 @@ def eliminar_txt():
     else:
         print("Eliminación cancelada.")
 
+
 def confirmar_descarga(videos_para_confirmar):
     """
     Pregunta al usuario si desea continuar con la descarga.
     Retorna True si acepta, False si rechaza.
     """
-    opcion = input("\n¿Quieres comenzar a descargar estos animes? (Y/N): ").strip().lower()
+    opcion = input(
+        "\n¿Quieres comenzar a descargar estos animes? (Y/N): ").strip().lower()
     if opcion in ['y', 'yes', 's', 'si']:
         return True
     else:
         print("❌ Descarga cancelada por el usuario.")
         return False
+
 
 def main(download_dir, archivo_animes, archivo_resultado_descargados, archivo_resultado_no_descargados):
     """
@@ -811,8 +839,9 @@ def menu():
     if not os.path.exists(archivo_resultado_no_descargados) or os.path.getsize(archivo_resultado_no_descargados) == 0:
         print("No se ejecuta la funcion buscar videos de anime")
     else:
-        continuar_descarga = flujo_descarga_animes(archivo_resultado_no_descargados, download_dir)
-        
+        continuar_descarga = flujo_descarga_animes(
+            archivo_resultado_no_descargados, download_dir)
+
         if continuar_descarga is False:
             eliminar_txt()
             print("\nVolviendo al menú principal...")
