@@ -43,12 +43,10 @@ def configurar_navegador(download_dir):
         "safebrowsing.enabled": True
     })
 
-    '''
+    
     # Lista de versiones de ChromeDriver a probar (de más nueva a más vieja)
     versiones_a_probar = [
-        "146.0.7680.153",
-        "144.0.7559.97",
-        "149.0.7827.156"
+        "151.0.7922.137",
     ]
 
     # Intentar cada versión hasta encontrar una que funcione
@@ -67,13 +65,12 @@ def configurar_navegador(download_dir):
         except Exception as e:
             print(f"✗ ChromeDriver {version} falló: {str(e)[:100]}...")
             continue
-    '''
-
+    
     # Si ninguna versión funciona, usar webdriver-manager automático
     try:
         print("Intentando con detección automática de versión...")
         driver_path = ChromeDriverManager().install()
-        service = Service(executable_path=r"C:\chromedriver.exe")
+        service = Service(executable_path=driver_path)
         return webdriver.Chrome(service=service, options=chrome_options)
     except Exception as e:
         print(f"Error final: {e}")
@@ -515,7 +512,7 @@ def flujo_descarga_animes(file_name, download_dir):
 
     # Paso 5: Confirmar si el usuario quiere descargar
     if not confirmar_descarga(videos_para_mostrar):
-        return  # Salir si el usuario no quiere proceder
+        return False # Asegúrate de retornar False aquí
 
     # Si el usuario confirma, volvemos a abrir el navegador para iniciar las descargas.
     # Nota: Si el enlace de Mega es directo, podrías usar 'requests' para descargar,
@@ -644,6 +641,17 @@ def eliminar_txt():
     else:
         print("Eliminación cancelada.")
 
+def confirmar_descarga(videos_para_confirmar):
+    """
+    Pregunta al usuario si desea continuar con la descarga.
+    Retorna True si acepta, False si rechaza.
+    """
+    opcion = input("\n¿Quieres comenzar a descargar estos animes? (Y/N): ").strip().lower()
+    if opcion in ['y', 'yes', 's', 'si']:
+        return True
+    else:
+        print("❌ Descarga cancelada por el usuario.")
+        return False
 
 def main(download_dir, archivo_animes, archivo_resultado_descargados, archivo_resultado_no_descargados):
     """
@@ -803,7 +811,12 @@ def menu():
     if not os.path.exists(archivo_resultado_no_descargados) or os.path.getsize(archivo_resultado_no_descargados) == 0:
         print("No se ejecuta la funcion buscar videos de anime")
     else:
-        flujo_descarga_animes(archivo_resultado_no_descargados, download_dir)
+        continuar_descarga = flujo_descarga_animes(archivo_resultado_no_descargados, download_dir)
+        
+        if continuar_descarga is False:
+            eliminar_txt()
+            print("\nVolviendo al menú principal...")
+            return menu()
 
     eliminar_txt()
 
