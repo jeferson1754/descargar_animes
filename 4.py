@@ -799,13 +799,21 @@ def menu_principal(download_dir):
 
 def menu():
 
-    # download_dir = r"D:\Xampp\htdocs\descargar_animes\Descargas"
-    download_dir = r"C:\Users\jvargas\Phyton\Descargar_Animes\descargas"
-    # download_dir = r"D:\Xampp\htdocs\descargar_animes\Descargas"
+    # Definir ambas rutas
+    ruta_1 = r"C:\Users\jvargas\Phyton\Descargar_Animes\descargas"
+    ruta_2 = r"D:\Xampp\htdocs\descargar_animes\Descargas"
+
+    # Verificar si la primera ruta existe; si no, usar la segunda
+    if os.path.exists(ruta_1):
+        download_dir = ruta_1
+        print(f"📁 Usando ruta principal: {download_dir}")
+    else:
+        download_dir = ruta_2
+        print(f"⚠️ La ruta principal no existe. Usando ruta alternativa: {download_dir}")
 
     # URL de la página a analizar
     url = menu_principal(download_dir)
-
+    
     if url is None or url == "":
         print("No se seleccionó ninguna opción válida. Volviendo al menú principal...")
         menu()
