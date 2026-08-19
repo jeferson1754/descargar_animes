@@ -472,3 +472,80 @@ def leer_nombres_animes_a_descargar(archivo_animes):
     except FileNotFoundError:
         print(f"No se pudo encontrar el archivo {archivo_animes}.")
         return []
+
+
+def mover_videos_y_limpiar_carpetas(directorio_origen, directorio_destino):
+    """
+    Mueve todos los videos encontrados en subcarpetas al directorio_destino
+    y elimina las carpetas de origen que hayan quedado vacías.
+    """
+    extensiones_video = ('.mp4', '.mkv', '.avi', '.mov', '.wmv')
+
+    if not os.path.exists(directorio_destino):
+        os.makedirs(directorio_destino)
+
+    # 1. Mover los archivos
+    print("--- Moviendo archivos ---")
+    for root, dirs, files in os.walk(directorio_origen):
+        # Evitar procesar el mismo directorio destino si está dentro del origen
+        if os.path.abspath(root) == os.path.abspath(directorio_destino):
+            continue
+
+        for file in files:
+            if file.lower().endswith(extensiones_video):
+                origen = os.path.join(root, file)
+                destino = os.path.join(directorio_destino, file)
+
+                if not os.path.exists(destino):
+                    shutil.move(origen, destino)
+                    print(f"✅ Movido: {file}")
+                else:
+                    print(f"⚠️ Ya existe: {file}")
+
+    # 2. Eliminar carpetas vacías
+    # Usamos topdown=False para eliminar subcarpetas antes que la carpeta padre
+    print("\n--- Limpiando carpetas vacías ---")
+    for root, dirs, files in os.walk(directorio_origen, topdown=False):
+        # No borrar el directorio raíz de origen ni el directorio destino
+        if os.path.abspath(root) == os.path.abspath(directorio_origen):
+            continue
+        if os.path.abspath(root) == os.path.abspath(directorio_destino):
+            continue
+
+        # Si la carpeta está vacía, borrarla
+        if not os.listdir(root):
+            try:
+                os.rmdir(root)
+                print(f"🗑️ Carpeta eliminada: {root}")
+            except OSError as e:
+                print(f"❌ No se pudo borrar {root}: {e}")
+
+    print("\nProceso completado.")
+
+def eliminar_txt():
+    """Elimina todos los archivos en formato TXT en la carpeta actual excepto 'requirements.txt' tras confirmación."""
+  # Filtrar archivos .txt excluyendo 'requirements.txt'
+    archivos_txt = [archivo for archivo in os.listdir(
+        '.') if archivo.endswith('.txt') and archivo != 'requirements.txt']
+
+    if not archivos_txt:
+        print("No se encontraron archivos TXT en la carpeta actual (excepto 'requirements.txt').")
+        return
+
+    print("Se encontraron los siguientes TXT (excepto 'requirements.txt'):")
+    for archivo in archivos_txt:
+        print(archivo)
+
+    confirmar = input(
+        "¿Estás seguro de que deseas eliminar estos archivos? (Presiona Enter para confirmar): ")
+
+    if confirmar == '':
+        for archivo in archivos_txt:
+            try:
+                os.remove(archivo)
+                print(f"Eliminado: {archivo}")
+            except Exception as e:
+                print(f"No se pudo eliminar {archivo}: {e}")
+    else:
+        print("Eliminación cancelada.")
+

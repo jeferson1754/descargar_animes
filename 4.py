@@ -15,103 +15,10 @@ import re
 import os
 import shutil
 
-from utilidades.navegador import configurar_navegador, configurar_navegador_inteligente, obtener_version_chrome
 from animes.buscador import extraer_nombres_anime
-from utilidades.archivos import guardar_resultados_animes_txt, leer_nombres_desde_txt, guardar_archivos_descargados, guardar_resultados_videos_txt, guardar_animes_no_descargados, leer_nombres_animes_a_descargar
+from utilidades.archivos import guardar_resultados_animes_txt, guardar_archivos_descargados, guardar_animes_no_descargados, leer_nombres_animes_a_descargar, mover_videos_y_limpiar_carpetas, eliminar_txt
 from animes.comparador import obtener_archivos_descargados, comparar_descargas
-from fuentes.tioanime import buscar_videos_tioanime
-from download.descargar import buscar_enlace_descarga_y_actualizar, buscar_boton_descarga, hacer_click_en_boton_descarga, detectar_servidor_descarga, encontrar_boton_descarga, verificar_descarga, flujo_descarga_animes
-
-def mover_videos_y_limpiar_carpetas(directorio_origen, directorio_destino):
-    """
-    Mueve todos los videos encontrados en subcarpetas al directorio_destino
-    y elimina las carpetas de origen que hayan quedado vacías.
-    """
-    extensiones_video = ('.mp4', '.mkv', '.avi', '.mov', '.wmv')
-
-    if not os.path.exists(directorio_destino):
-        os.makedirs(directorio_destino)
-
-    # 1. Mover los archivos
-    print("--- Moviendo archivos ---")
-    for root, dirs, files in os.walk(directorio_origen):
-        # Evitar procesar el mismo directorio destino si está dentro del origen
-        if os.path.abspath(root) == os.path.abspath(directorio_destino):
-            continue
-
-        for file in files:
-            if file.lower().endswith(extensiones_video):
-                origen = os.path.join(root, file)
-                destino = os.path.join(directorio_destino, file)
-
-                if not os.path.exists(destino):
-                    shutil.move(origen, destino)
-                    print(f"✅ Movido: {file}")
-                else:
-                    print(f"⚠️ Ya existe: {file}")
-
-    # 2. Eliminar carpetas vacías
-    # Usamos topdown=False para eliminar subcarpetas antes que la carpeta padre
-    print("\n--- Limpiando carpetas vacías ---")
-    for root, dirs, files in os.walk(directorio_origen, topdown=False):
-        # No borrar el directorio raíz de origen ni el directorio destino
-        if os.path.abspath(root) == os.path.abspath(directorio_origen):
-            continue
-        if os.path.abspath(root) == os.path.abspath(directorio_destino):
-            continue
-
-        # Si la carpeta está vacía, borrarla
-        if not os.listdir(root):
-            try:
-                os.rmdir(root)
-                print(f"🗑️ Carpeta eliminada: {root}")
-            except OSError as e:
-                print(f"❌ No se pudo borrar {root}: {e}")
-
-    print("\nProceso completado.")
-
-
-
-def eliminar_txt():
-    """Elimina todos los archivos en formato TXT en la carpeta actual excepto 'requirements.txt' tras confirmación."""
-  # Filtrar archivos .txt excluyendo 'requirements.txt'
-    archivos_txt = [archivo for archivo in os.listdir(
-        '.') if archivo.endswith('.txt') and archivo != 'requirements.txt']
-
-    if not archivos_txt:
-        print("No se encontraron archivos TXT en la carpeta actual (excepto 'requirements.txt').")
-        return
-
-    print("Se encontraron los siguientes TXT (excepto 'requirements.txt'):")
-    for archivo in archivos_txt:
-        print(archivo)
-
-    confirmar = input(
-        "¿Estás seguro de que deseas eliminar estos archivos? (Presiona Enter para confirmar): ")
-
-    if confirmar == '':
-        for archivo in archivos_txt:
-            try:
-                os.remove(archivo)
-                print(f"Eliminado: {archivo}")
-            except Exception as e:
-                print(f"No se pudo eliminar {archivo}: {e}")
-    else:
-        print("Eliminación cancelada.")
-
-
-def confirmar_descarga(videos_para_confirmar):
-    """
-    Pregunta al usuario si desea continuar con la descarga.
-    Retorna True si acepta, False si rechaza.
-    """
-    opcion = input(
-        "\n¿Quieres comenzar a descargar estos animes? (Y/N): ").strip().lower()
-    if opcion in ['y', 'yes', 's', 'si']:
-        return True
-    else:
-        print("❌ Descarga cancelada por el usuario.")
-        return False
+from download.descargar import flujo_descarga_animes
 
 
 def main(download_dir, archivo_animes, archivo_resultado_descargados, archivo_resultado_no_descargados):
@@ -263,7 +170,6 @@ def menu():
 
     # Ruta de la carpeta de descargas y archivo de animes
     archivo_animes = "resultados_anime.txt"
-    archivo_resultado = "archivos_descargados.txt"
     archivo_resultado_descargados = "archivos_descargados.txt"
     archivo_resultado_no_descargados = "animes_no_descargados.txt"
 
@@ -293,8 +199,4 @@ def menu():
 
 
 if __name__ == "__main__":
-
-    # URL de la página web
-    url_tioanime = "https://tioanime.com/"
-
     menu()
