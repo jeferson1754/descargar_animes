@@ -5,3 +5,6 @@ descargas/*
 
 # Exceptuar requirements.txt
 !requirements.txt
+
+*.pyc
+__pycache__/

@@ -7,12 +7,10 @@ import difflib
 from selenium.webdriver.common.by import By
 
 
-def buscar_videos_tioanime(nombres_videos, max_intentos=3):
+def buscar_pagina_principal(url, nombres_videos, max_intentos=3):
     """
     Busca videos en la página web con un sistema de reintentos en caso de fallo de conexión.
     """
-
-    url = "https://tioanime.com/"
     intentos = 0
 
     while intentos < max_intentos:

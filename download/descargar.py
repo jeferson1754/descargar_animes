@@ -2,11 +2,13 @@ import time
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+import os
 
 from utilidades.archivos import leer_nombres_desde_txt, guardar_resultados_videos_txt
-from fuentes.tioanime import buscar_videos_tioanime
 from utilidades.navegador import configurar_navegador
-import os
+from animes.buscador import buscar_en_fuentes
+from config import FUENTES_ANIME
+
 
 
 def verificar_descarga(
@@ -173,8 +175,6 @@ def verificar_descarga(
     )
 
     return None
-
-
 
 def buscar_enlace_descarga_y_actualizar(driver, videos_encontrados):
     """Busca el enlace de descarga (Mega) para cada video y lo agrega a la lista."""
@@ -487,19 +487,114 @@ def hacer_click_en_boton_descarga(
 
         return False
 
-    
+def descargar_video_con_reintentos(
+    video,
+    download_dir,
+    max_intentos=3
+):
+    """
+    Intenta descargar un video varias veces.
+    Crea un driver nuevo en cada intento.
+    """
+
+    for intento in range(1, max_intentos + 1):
+
+        print(
+            f"\nIntento {intento}/{max_intentos}"
+        )
+
+        driver = None
+
+        try:
+
+            driver = configurar_navegador(
+                download_dir
+            )
+
+            if driver is None:
+                raise Exception(
+                    "No se pudo iniciar ChromeDriver."
+                )
+
+            resultado = hacer_click_en_boton_descarga(
+                driver,
+                video["link_descarga"],
+                download_dir,
+                video["nombre"]
+            )
+
+            if resultado:
+
+                print(
+                    f"✅ Descarga completada: "
+                    f"{video['nombre']}"
+                )
+
+                return True
+
+            print(
+                f"❌ Falló el intento "
+                f"{intento}/{max_intentos}"
+            )
+
+        except Exception as e:
+
+            print(
+                f"❌ Error en intento "
+                f"{intento}/{max_intentos}: {e}"
+            )
+
+        finally:
+
+            if driver is not None:
+
+                try:
+                    driver.quit()
+                    print("🔒 Driver cerrado.")
+
+                except Exception as e:
+
+                    print(
+                        f"⚠️ Error cerrando driver: {e}"
+                    )
+
+        if intento < max_intentos:
+
+            espera = intento * 10
+
+            print(
+                f"🔄 Reintentando en "
+                f"{espera} segundos..."
+            )
+
+            time.sleep(espera)
+
+    return False
     
 def flujo_descarga_animes(file_name, download_dir):
     # Leer los videos desde el archivo .txt (solo nombres de animes)
-    nombres_animes = leer_nombres_desde_txt(file_name)
+    nombres_animes = leer_nombres_desde_txt(
+        file_name
+    )
+
+    if not nombres_animes:
+
+        print(
+            "❌ No hay animes pendientes para buscar."
+        )
+
+        return False
 
     # Paso 1: Buscar videos relacionados con los animes
     print("Buscando videos relacionados...")
-    videos_encontrados = buscar_videos_tioanime(nombres_animes)
+    videos_encontrados = buscar_en_fuentes(
+        nombres_animes,
+        FUENTES_ANIME
+    )
 
     if not videos_encontrados:
         print("No se encontraron videos para los animes indicados.")
-        return
+        return False
 
     # Iniciar el navegador para buscar los enlaces de descarga
     driver = configurar_navegador(download_dir)
@@ -543,109 +638,36 @@ def flujo_descarga_animes(file_name, download_dir):
 
     for video in videos_finales:
 
-        if not video['link_descarga'] or video['link_descarga'] == "No encontrado":
+        if (
+            not video["link_descarga"]
+            or video["link_descarga"] == "No encontrado"
+        ):
+
             print(
-                f"⚠️ Saltando descarga de {video['nombre']}: "
-                "Enlace no disponible."
+                f"⚠️ Saltando {video['nombre']}: "
+                "enlace no disponible."
             )
+
             continue
 
         print("\n" + "=" * 60)
-        print(f"Descargando: {video['nombre']}")
-        print("=" * 60)
-
-        max_intentos = 3
-        descarga_exitosa = False
-
-        for intento in range(1, max_intentos + 1):
-
-            print(f"\nIntento {intento}/{max_intentos}")
-
-            driver = None
-
-            try:
-                # Crear un navegador NUEVO para cada intento
-                driver = configurar_navegador(download_dir)
-
-                if driver is None:
-                    raise Exception("No se pudo iniciar ChromeDriver.")
-
-                resultado = hacer_click_en_boton_descarga(
-                    driver,
-                    video['link_descarga'],
-                    download_dir,
-                    video['nombre']
-                )
-
-                if resultado:
-                    descarga_exitosa = True
-                    print(f"✅ Descarga completada: {video['nombre']}")
-                    break
-                else:
-                    print(
-                        f"❌ La descarga falló en el intento "
-                        f"{intento}/{max_intentos}"
-                    )
-
-                    if intento < max_intentos:
-                        espera = intento * 10
-
-                        print(
-                            f"🔄 Cerrando navegador y reintentando "
-                            f"en {espera} segundos..."
-                        )
-
-                        time.sleep(espera)
-
-            except Exception as e:
-                print(
-                    f"❌ Error en intento {intento}/{max_intentos}: {e}"
-                )
-
-                if intento < max_intentos:
-                    espera = intento * 10
-
-                    print(
-                        f"🔄 Cerrando navegador y reintentando "
-                        f"en {espera} segundos..."
-                    )
-
-                    time.sleep(espera)
-
-            finally:
-                # Cerrar SIEMPRE el navegador
-                if driver is not None:
-                    try:
-                        driver.quit()
-                        print("🔒 Driver cerrado.")
-                    except Exception as e:
-                        print(f"⚠️ No se pudo cerrar el driver: {e}")
-
-            # ------------------------------------------------------
-            # Esperar antes del siguiente intento
-            # ------------------------------------------------------
-
-            if not descarga_exitosa and intento < max_intentos:
-
-                espera = intento * 10
-
-                print(
-                    f"🔄 Nuevo driver en "
-                    f"{espera} segundos..."
-                )
-
-                time.sleep(espera)
-
-    if not descarga_exitosa:
 
         print(
-            f"❌ No se pudo descargar "
-            f"{video['nombre']} "
-            f"después de {max_intentos} intentos."
+            f"Descargando: "
+            f"{video['nombre']}"
         )
 
-        print("\n" + "=" * 60)
-        print("PROCESO DE DESCARGAS TERMINADO")
         print("=" * 60)
 
-        return True
+        resultado = descargar_video_con_reintentos(
+            video,
+            download_dir,
+            max_intentos=3
+        )
+
+        if not resultado:
+
+            print(
+                f"❌ No se pudo descargar: "
+                f"{video['nombre']}"
+            )

@@ -2,7 +2,7 @@
 import time
 from selenium.webdriver.common.by import By
 
-from fuentes.tioanime import buscar_videos_tioanime
+from fuentes.tioanime import buscar_pagina_principal
 from utilidades.navegador import configurar_navegador
 
 def extraer_nombres_anime(url, download_dir):
@@ -35,30 +35,28 @@ def extraer_nombres_anime(url, download_dir):
 
 def buscar_en_fuentes(nombres_animes, fuentes):
     """
-    Busca los animes pendientes en las fuentes disponibles.
-
-    Para cada anime:
-        1. Prueba la primera fuente.
-        2. Si no lo encuentra, prueba la siguiente.
-        3. Devuelve los resultados encontrados.
+    Busca cada anime en las fuentes disponibles.
+    Prueba las fuentes en orden hasta encontrar un resultado.
     """
 
     resultados = []
 
     for anime in nombres_animes:
 
-        print("\n" + "=" * 50)
+        print("\n" + "=" * 60)
         print(f"🔎 Buscando: {anime}")
-        print("=" * 50)
+        print("=" * 60)
 
         encontrado = False
 
         for fuente in fuentes:
 
-            if not fuente["activa"]:
+            if not fuente.get("activa", True):
                 continue
 
             nombre_fuente = fuente["nombre"]
+            url_fuente = fuente["url"]
+            funcion_busqueda = fuente["buscar"]
 
             print(
                 f"🌐 Probando fuente: {nombre_fuente}"
@@ -66,8 +64,8 @@ def buscar_en_fuentes(nombres_animes, fuentes):
 
             try:
 
-                videos = fuente["buscar"](
-                    fuente["url"],
+                videos = funcion_busqueda(
+                    url_fuente,
                     [anime]
                 )
 
@@ -77,17 +75,18 @@ def buscar_en_fuentes(nombres_animes, fuentes):
                         f"✅ Encontrado en {nombre_fuente}"
                     )
 
+                    for video in videos:
+
+                        video["fuente"] = nombre_fuente
+
                     resultados.extend(videos)
 
                     encontrado = True
-
                     break
 
-                else:
-
-                    print(
-                        f"❌ No encontrado en {nombre_fuente}"
-                    )
+                print(
+                    f"❌ No encontrado en {nombre_fuente}"
+                )
 
             except Exception as e:
 
@@ -102,4 +101,3 @@ def buscar_en_fuentes(nombres_animes, fuentes):
             )
 
     return resultados
-
