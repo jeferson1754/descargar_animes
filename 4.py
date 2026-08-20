@@ -107,14 +107,21 @@ def procesar_animes(
     # Guardar pendientes
     # --------------------------------------------------
 
+    # --------------------------------------------------
+    # Guardar pendientes
+    # --------------------------------------------------
 
+    guardar_animes_no_descargados(
+        animes_no_descargados,
+        archivo_resultado_no_descargados
+    )
 
     return bool(animes_no_descargados)
+
 
 # ============================================================
 # MENÚ DE DÍAS
 # ============================================================
-
 
 def menu_dias():
 
@@ -227,169 +234,64 @@ def menu_principal(download_dir):
 
 def menu():
 
-    # --------------------------------------------------
-    # Seleccionar ruta de descarga
-    # --------------------------------------------------
+    # Definir ambas rutas
+    ruta_1 = r"C:\Users\jvargas\Phyton\Descargar_Animes\descargas"
+    ruta_2 = r"D:\Xampp\htdocs\descargar_animes\Descargas"
 
-    if os.path.exists(DOWNLOAD_DIR):
-
-        download_dir = DOWNLOAD_DIR
-
-        print(
-            f"📁 Usando ruta principal:\n"
-            f"{download_dir}"
-        )
-
-    elif os.path.exists(DOWNLOAD_DIR_2):
-
-        download_dir = DOWNLOAD_DIR_2
-
-        print(
-            "⚠️ La ruta principal no existe."
-        )
-
-        print(
-            f"📁 Usando ruta alternativa:\n"
-            f"{download_dir}"
-        )
-
+    # Verificar si la primera ruta existe; si no, usar la segunda
+    if os.path.exists(ruta_1):
+        download_dir = ruta_1
+        print(f"📁 Usando ruta principal: {download_dir}")
     else:
-
+        download_dir = ruta_2
         print(
-            "❌ No se encontró ninguna ruta de descarga."
-        )
+            f"⚠️ La ruta principal no existe. Usando ruta alternativa: {download_dir}")
 
-        return
+    # URL de la página a analizar
+    url = menu_principal(download_dir)
 
-    # --------------------------------------------------
-    # Menú
-    # --------------------------------------------------
+    if url is None or url == "":
+        print("No se seleccionó ninguna opción válida. Volviendo al menú principal...")
+        menu()
 
-    url = menu_principal(
-        download_dir
-    )
+    # Extraer y mostrar los nombres de los animes
+    nombres_anime = extraer_nombres_anime(url, download_dir)
 
-    if not url:
+    # Guardar los nombres en un archivo .txt
+    guardar_resultados_animes_txt(nombres_anime, "resultados_anime.txt")
 
-        print(
-            "👋 Programa finalizado."
-        )
+    # Mostrar conteo y los nombres en la consola
+    conteo_anime = len(nombres_anime)
 
-        return
-
-    # --------------------------------------------------
-    # Extraer animes
-    # --------------------------------------------------
-
-    print(
-        "\n🔎 Analizando programación..."
-    )
-
-    nombres_anime = extraer_nombres_anime(
-        url,
-        download_dir
-    )
-
-    if not nombres_anime:
-
-        print(
-            "❌ No se encontraron animes."
-        )
-
-        return
-
-    # --------------------------------------------------
-    # Guardar resultados
-    # --------------------------------------------------
-
+    # Ruta de la carpeta de descargas y archivo de animes
     archivo_animes = "resultados_anime.txt"
+    archivo_resultado_descargados = "archivos_descargados.txt"
+    archivo_resultado_no_descargados = "animes_no_descargados.txt"
 
-    archivo_resultado_descargados = (
-        "archivos_descargados.txt"
-    )
+    print(f"Cantidad de animes extraídos: {conteo_anime}")
+    for nombre in nombres_anime:
+        print(nombre)
 
-    archivo_resultado_no_descargados = (
-        "animes_no_descargados.txt"
-    )
+    print(f"Datos guardados en 'resultados_anime.txt'")
 
-    guardar_resultados_animes_txt(
-        nombres_anime,
-        archivo_animes
-    )
+    # Ejecutar la función principal
+    procesar_animes(download_dir, archivo_animes, archivo_resultado_descargados,
+                    archivo_resultado_no_descargados)
 
-    # --------------------------------------------------
-    # Mostrar animes
-    # --------------------------------------------------
+    # Ejecutar función principal solo si hay animes por descargar
+    if not os.path.exists(archivo_resultado_no_descargados) or os.path.getsize(archivo_resultado_no_descargados) == 0:
+        print("No se ejecuta la funcion buscar videos de anime")
+    else:
+        continuar_descarga = flujo_descarga_animes(
+            archivo_resultado_no_descargados, download_dir)
 
-    print(
-        f"\n📺 Animes encontrados: "
-        f"{len(nombres_anime)}"
-    )
-
-    for indice, nombre in enumerate(
-        nombres_anime,
-        1
-    ):
-
-        print(
-            f"{indice}. {nombre}"
-        )
-
-    # --------------------------------------------------
-    # Determinar pendientes
-    # --------------------------------------------------
-
-    hay_pendientes = procesar_animes(
-        download_dir,
-        archivo_animes,
-        archivo_resultado_descargados,
-        archivo_resultado_no_descargados
-    )
-
-    if not hay_pendientes:
-
-        eliminar_txt()
-
-        print(
-            "\nNo hay nada que descargar."
-        )
-
-        return
-
-    # --------------------------------------------------
-    # Buscar y descargar
-    # --------------------------------------------------
-
-    continuar = flujo_descarga_animes(
-        archivo_resultado_no_descargados,
-        download_dir
-    )
-
-    # --------------------------------------------------
-    # Si se cancela, volver al menú
-    # --------------------------------------------------
-
-    if continuar is False:
-
-        print(
-            "\n↩️ Volviendo al menú principal..."
-        )
-
-        eliminar_txt()
-
-        return menu()
-
-    # --------------------------------------------------
-    # Limpieza
-    # --------------------------------------------------
+        if continuar_descarga is False:
+            eliminar_txt()
+            print("\nVolviendo al menú principal...")
+            return menu()
 
     eliminar_txt()
 
 
-# ============================================================
-# EJECUCIÓN
-# ============================================================
-
 if __name__ == "__main__":
-
     menu()

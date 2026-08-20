@@ -3,13 +3,14 @@ import re
 import os
 import shutil
 
+
 def guardar_resultados_animes_txt(nombres, filename):
     with open(filename, 'w', encoding='utf-8') as file:
         # Escribir los nombres de los animes
         for nombre in nombres:
             file.write(f"{nombre}\n")
-            
-            
+
+
 def leer_nombres_y_enlaces_desde_txt(filename):
     try:
         with open(filename, 'r', encoding='utf-8') as file:
@@ -31,7 +32,8 @@ def leer_nombres_y_enlaces_desde_txt(filename):
     except FileNotFoundError:
         print(f"El archivo '{filename}' no fue encontrado.")
         return []
-            
+
+
 def guardar_animes_no_descargados(animes_no_descargados, archivo_salida):
     """
     Guarda los animes que no han sido descargados en un archivo de texto.
@@ -40,11 +42,15 @@ def guardar_animes_no_descargados(animes_no_descargados, archivo_salida):
         animes_no_descargados (list): Lista de animes que no se han descargado.
         archivo_salida (str): Nombre del archivo donde se guardarán los animes no descargados.
     """
-    with open(archivo_salida, 'w', encoding='utf-8') as f:
-        for anime in animes_no_descargados:
-            f.write(anime + "\n")
+    try:
+        with open(archivo_salida, 'w', encoding='utf-8') as f:
+            for anime in animes_no_descargados:
+                f.write(anime + "\n")
 
-            
+    except Exception as e:
+        print(f"Error al guardar los animes no descargados: {e}")
+
+
 def guardar_resultados_videos_txt(videos, filename):
     """Guarda los detalles de los videos, incluyendo el enlace de descarga, en un archivo de texto."""
     with open(filename, 'w', encoding='utf-8') as file:
@@ -70,6 +76,7 @@ def leer_nombres_desde_txt(filename):
         print(f"El archivo '{filename}' no fue encontrado.")
         return []
 
+
 def normalizar_nombre(nombre):
     """
     Normaliza el nombre del anime para que sea comparable con los nombres de archivo.
@@ -84,6 +91,7 @@ def normalizar_nombre(nombre):
     # Eliminar espacios, guiones, guiones bajos y convertir a minúsculas
     nombre_normalizado = re.sub(r'[^a-zA-Z0-9]', '', nombre.lower())
     return nombre_normalizado
+
 
 def guardar_archivos_descargados(archivos, archivo_salida):
     """
@@ -454,7 +462,8 @@ def limpiar_carpetas_descarga(
     eliminar_carpetas_vacias(
         directorio
     )
-    
+
+
 def leer_nombres_animes_a_descargar(archivo_animes):
     """
     Lee los nombres de los animes a descargar desde un archivo.
@@ -522,6 +531,7 @@ def mover_videos_y_limpiar_carpetas(directorio_origen, directorio_destino):
 
     print("\nProceso completado.")
 
+
 def eliminar_txt():
     """Elimina todos los archivos en formato TXT en la carpeta actual excepto 'requirements.txt' tras confirmación."""
   # Filtrar archivos .txt excluyendo 'requirements.txt'
@@ -548,4 +558,3 @@ def eliminar_txt():
                 print(f"No se pudo eliminar {archivo}: {e}")
     else:
         print("Eliminación cancelada.")
-
