@@ -8,6 +8,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+from utilidades.archivos import normalizar_nombre
+
 
 def extraer_episodio_desde_url(url):
     match = re.search(r'-(\d+)$', url)
@@ -18,76 +20,193 @@ def extraer_episodio_desde_url(url):
     return None
 
 
-def buscar_pagina_principal(url, nombres_videos, max_intentos=3):
+def buscar_pagina_principal(url, animes, max_intentos=3):
     """
-    Busca videos en la página web con un sistema de reintentos en caso de fallo de conexión.
+    Busca los animes en la página principal.
+
+    `animes` debe ser una lista de diccionarios:
+        {
+            "nombre": "...",
+            "episodio_buscado": 8,
+            ...
+        }
     """
+
     intentos = 0
+    respuesta = None
+
+    # ============================================================
+    # 1. CONECTAR CON REINTENTOS
+    # ============================================================
 
     while intentos < max_intentos:
-        try:
-            # Intentar obtener el contenido de la página web
-            # Añadido timeout para evitar bloqueos largos
-            respuesta = requests.get(url, timeout=10)
-            respuesta.raise_for_status()  # Verifica si la solicitud fue exitosa
 
-            # Si la conexión es exitosa, rompemos el bucle de reintentos
+        try:
+
+            respuesta = requests.get(
+                url,
+                timeout=10
+            )
+
+            respuesta.raise_for_status()
+
             break
 
         except requests.exceptions.RequestException as e:
+
             intentos += 1
+
             print(
-                f"⚠️ Error al conectar con la página (Intento {intentos}/{max_intentos}): {e}")
+                f"⚠️ Error al conectar con la página "
+                f"(Intento {intentos}/{max_intentos}): {e}"
+            )
 
             if intentos < max_intentos:
-                print("🔄 Reintentando en 3 segundos...")
+
+                print(
+                    "🔄 Reintentando en 3 segundos..."
+                )
+
                 time.sleep(3)
+
             else:
-                print("❌ Se agotaron los reintentos. No se pudo conectar con la página.")
+
+                print(
+                    "❌ Se agotaron los reintentos."
+                )
+
                 return []
 
-    # Si pasamos los intentos con éxito, procesamos el contenido con BeautifulSoup
-    try:
-        soup = BeautifulSoup(respuesta.text, 'html.parser')
+    # ============================================================
+    # 2. PROCESAR HTML
+    # ============================================================
 
-        # Lista para almacenar los enlaces de los videos encontrados
+    try:
+
+        soup = BeautifulSoup(
+            respuesta.text,
+            "html.parser"
+        )
+
         videos_encontrados = []
 
-        # Función para normalizar el nombre (eliminar caracteres especiales y convertir a minúsculas)
-        def normalizar_nombre(nombre):
-            return re.sub(r'\s*:\s*', ':', nombre).lower()
+        # --------------------------------------------------------
+        # Recorrer enlaces de la página
+        # --------------------------------------------------------
 
-        # Buscar todos los enlaces en la página
-        for enlace in soup.find_all('a', href=True):
-            texto = enlace.text.strip()
-            href = enlace['href']
+        for enlace in soup.find_all(
+            "a",
+            href=True
+        ):
 
-            # Unir la URL base con el enlace relativo
-            url_completa = urljoin(url, href)
+            texto = enlace.get_text(
+                " ",
+                strip=True
+            )
 
-            # Verificar si el enlace pertenece al formato "https://tioanime.com/ver/(nombre_anime)"
-            if "https://tioanime.com/ver/" in url_completa:
-                for nombre in nombres_videos:
-                    # Normalizar tanto el nombre del anime como el texto del enlace
-                    nombre_normalizado = normalizar_nombre(nombre)
-                    texto_normalizado = normalizar_nombre(texto)
+            href = enlace["href"]
 
-                    coincidencias = difflib.get_close_matches(
-                        nombre_normalizado, [texto_normalizado], n=1, cutoff=0.7)
+            url_completa = urljoin(
+                url,
+                href
+            )
 
-                    if coincidencias:
-                        # Evitar duplicados si un anime ya fue agregado
-                        nuevo_video = {'nombre': texto, 'enlace': url_completa,
-                                       'episodio': extraer_episodio_desde_url(url_completa)}
-                        if nuevo_video not in videos_encontrados:
-                            videos_encontrados.append(nuevo_video)
+            # ----------------------------------------------------
+            # Aquí iría la condición específica de la fuente
+            # ----------------------------------------------------
+
+            if "/ver/" not in url_completa:
+                continue
+
+            # ----------------------------------------------------
+            # Comparar contra cada anime pendiente
+            # ----------------------------------------------------
+
+            for anime in animes:
+
+                nombre_anime = anime["nombre"]
+
+                nombre_normalizado = normalizar_nombre(
+                    nombre_anime
+                )
+
+                texto_normalizado = normalizar_nombre(
+                    texto
+                )
+
+                coincidencias = difflib.get_close_matches(
+                    nombre_normalizado,
+                    [texto_normalizado],
+                    n=1,
+                    cutoff=0.7
+                )
+
+                if not coincidencias:
+                    continue
+
+                # ------------------------------------------------
+                # Obtener episodio de la URL
+                # ------------------------------------------------
+
+                episodio = extraer_episodio_desde_url(
+                    url_completa
+                )
+                
+                episodio_buscado = anime.get("episodio_buscado")
+
+                if episodio is None:
+                    print(
+                        f"⚠️ No se pudo determinar el episodio de: "
+                        f"{url_completa}"
+                    )
+                    continue
+
+                if episodio != episodio_buscado:
+                    print(
+                        f"⏭️ Episodio incorrecto: {episodio}. "
+                        f"Se necesita el episodio {episodio_buscado}."
+                    )
+                    continue
+
+                print(
+                    f"✅ Episodio correcto encontrado: "
+                    f"{episodio_buscado}"
+                )
+
+                # ------------------------------------------------
+                # Crear resultado conservando información
+                # del anime original
+                # ------------------------------------------------
+
+                nuevo_video = {
+                    "nombre": texto,
+                    "nombre_anime": nombre_anime,
+                    "enlace": url_completa,
+                    "episodio": episodio,
+                    "episodio_buscado": anime.get(
+                        "episodio_buscado"
+                    )
+                }
+
+                # ------------------------------------------------
+                # Evitar duplicados
+                # ------------------------------------------------
+
+                if nuevo_video not in videos_encontrados:
+
+                    videos_encontrados.append(
+                        nuevo_video
+                    )
 
         return videos_encontrados
 
     except Exception as e:
-        print(f"❌ Error al procesar el contenido HTML: {e}")
-        return []
 
+        print(
+            f"❌ Error al procesar el contenido HTML: {e}"
+        )
+
+        return []
 
 def buscar_videos_tioanime(url, nombres_videos):
     """

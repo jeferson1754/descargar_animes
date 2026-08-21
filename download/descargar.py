@@ -593,7 +593,7 @@ def flujo_descarga_animes(file_name, download_dir):
     # Paso 1: Buscar videos relacionados con los animes
     print("Buscando videos relacionados...")
     videos_encontrados = buscar_en_fuentes(
-        nombres_animes,
+        animes,
         FUENTES_ANIME
     )
 

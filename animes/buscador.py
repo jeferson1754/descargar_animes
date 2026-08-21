@@ -174,7 +174,9 @@ def buscar_en_fuentes(nombres_animes, fuentes):
     for anime in nombres_animes:
 
         print("\n" + "=" * 60)
-        print(f"🔎 Buscando: {anime}")
+        print(
+            f"🔎 Buscando: {anime['nombre']}"
+        )
         print("=" * 60)
 
         encontrado = False
@@ -189,7 +191,8 @@ def buscar_en_fuentes(nombres_animes, fuentes):
             funcion_busqueda = fuente["buscar"]
 
             print(
-                f"🌐 Probando fuente: {nombre_fuente}"
+                f"🌐 Probando fuente: "
+                f"{nombre_fuente}"
             )
 
             try:
@@ -202,32 +205,40 @@ def buscar_en_fuentes(nombres_animes, fuentes):
                 if videos:
 
                     print(
-                        f"✅ Encontrado en {nombre_fuente}"
+                        f"✅ Encontrado en "
+                        f"{nombre_fuente}"
                     )
 
                     for video in videos:
 
-                        video["fuente"] = nombre_fuente
+                        video["fuente"] = (
+                            nombre_fuente
+                        )
 
-                    resultados.extend(videos)
+                    resultados.extend(
+                        videos
+                    )
 
                     encontrado = True
+
                     break
 
                 print(
-                    f"❌ No encontrado en {nombre_fuente}"
+                    f"❌ No encontrado en "
+                    f"{nombre_fuente}"
                 )
 
             except Exception as e:
 
                 print(
-                    f"⚠️ Error en {nombre_fuente}: {e}"
+                    f"⚠️ Error en "
+                    f"{nombre_fuente}: {e}"
                 )
 
         if not encontrado:
 
             print(
-                f"❌ No se encontró: {anime}"
+                f"❌ No se encontró: "
+                f"{anime['nombre']}"
             )
-
     return resultados
