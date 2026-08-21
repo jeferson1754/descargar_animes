@@ -1,6 +1,9 @@
 import re
 import os
 
+from utilidades.archivos import extraer_episodio_archivo
+
+
 def normalizar_nombre(nombre):
     """
     Normaliza el nombre del anime para que sea comparable con los nombres de archivo.
@@ -37,35 +40,99 @@ def obtener_archivos_descargados(download_dir):
         return []
 
 
-def comparar_descargas(animes_a_descargar, archivos_descargados):
+def comparar_descargas(
+    animes_a_descargar,
+    archivos_descargados
+):
     """
-    Compara los animes a descargar con los archivos descargados para evitar duplicados.
+    Compara animes pendientes con los archivos descargados,
+    teniendo en cuenta el episodio específico.
 
-    Args:
-        animes_a_descargar (list): Lista de animes que se quieren descargar.
-        archivos_descargados (list): Lista de archivos ya descargados.
+    Cada anime debe tener:
 
-    Returns:
-        list: Lista de animes que no han sido descargados.
+        {
+            "nombre": "...",
+            "episodio_buscado": 8,
+            ...
+        }
+
+    Devuelve únicamente los animes cuyo episodio pendiente
+    todavía no existe localmente.
     """
+
     animes_no_descargados = []
+
+    # --------------------------------------------------
+    # Crear una estructura con los archivos existentes
+    # --------------------------------------------------
+
+    archivos_info = []
+
+    for archivo in archivos_descargados:
+
+        nombre_archivo_normalizado = normalizar_nombre(
+            archivo
+        )
+
+        episodio = extraer_episodio_archivo(
+            archivo
+        )
+
+        archivos_info.append({
+            "archivo": archivo,
+            "nombre_normalizado": nombre_archivo_normalizado,
+            "episodio": episodio
+        })
+
+    # --------------------------------------------------
+    # Analizar cada anime pendiente
+    # --------------------------------------------------
+
     for anime in animes_a_descargar:
-        # Normalizar el nombre del anime a comparar
-        anime_normalizado = normalizar_nombre(anime)
 
-        # Comparar el nombre normalizado con los archivos descargados
+        nombre_anime = anime["nombre"]
+
+        episodio_buscado = anime.get(
+            "episodio_buscado"
+        )
+
+        nombre_normalizado = normalizar_nombre(
+            nombre_anime
+        )
+
         encontrado = False
-        for archivo in archivos_descargados:
-            archivo_normalizado = normalizar_nombre(archivo)
 
-            # Si el nombre normalizado del anime está en el archivo descargado
-            if anime_normalizado in archivo_normalizado:
+        for archivo in archivos_info:
+
+            # El nombre del anime debe coincidir
+            if nombre_normalizado not in archivo[
+                "nombre_normalizado"
+            ]:
+                continue
+
+            # El episodio debe coincidir
+            if archivo["episodio"] == episodio_buscado:
+
                 encontrado = True
+
+                print(
+                    f"✅ Ya descargado: "
+                    f"{nombre_anime} "
+                    f"Episodio {episodio_buscado}"
+                )
+
                 break
 
         if not encontrado:
-            animes_no_descargados.append(anime)
+
+            print(
+                f"⬇️ Pendiente: "
+                f"{nombre_anime} "
+                f"Episodio {episodio_buscado}"
+            )
+
+            animes_no_descargados.append(
+                anime
+            )
 
     return animes_no_descargados
-
-

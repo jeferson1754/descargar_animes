@@ -1,14 +1,72 @@
 # utilidades/archivos.py
+import json
 import re
 import os
 import shutil
 
 
-def guardar_resultados_animes_txt(nombres, filename):
-    with open(filename, 'w', encoding='utf-8') as file:
-        # Escribir los nombres de los animes
-        for nombre in nombres:
-            file.write(f"{nombre}\n")
+def guardar_resultados_animes_txt(animes, filename):
+    """
+    Guarda la información de los animes en un archivo TXT.
+
+    Cada anime contiene:
+    - nombre
+    - episodio_actual
+    - episodios_totales
+    - pendientes
+    - episodio_buscado
+    """
+
+    try:
+        with open(
+            filename,
+            "w",
+            encoding="utf-8"
+        ) as file:
+
+            for anime in animes:
+
+                file.write(
+                    f"Nombre: {anime['nombre']}\n"
+                )
+
+                file.write(
+                    f"Episodio actual: "
+                    f"{anime['episodio_actual']}\n"
+                )
+
+                file.write(
+                    f"Episodios totales: "
+                    f"{anime['episodios_totales']}\n"
+                )
+
+                file.write(
+                    f"Pendientes: "
+                    f"{anime['pendientes']}\n"
+                )
+
+                file.write(
+                    f"Episodio buscado: "
+                    f"{anime['episodio_buscado']}\n"
+                )
+
+                file.write(
+                    "-" * 50 + "\n"
+                )
+
+        print(
+            f"✅ Resultados guardados en: {filename}"
+        )
+
+        return True
+
+    except Exception as e:
+
+        print(
+            f"❌ Error guardando resultados: {e}"
+        )
+
+        return False
 
 
 def leer_nombres_y_enlaces_desde_txt(filename):
@@ -34,21 +92,58 @@ def leer_nombres_y_enlaces_desde_txt(filename):
         return []
 
 
-def guardar_animes_no_descargados(animes_no_descargados, archivo_salida):
+def guardar_animes_no_descargados(
+    animes_no_descargados,
+    archivo_salida
+):
     """
-    Guarda los animes que no han sido descargados en un archivo de texto.
+    Guarda los animes pendientes junto con su información
+    de episodios en un archivo JSON.
 
-    Args:
-        animes_no_descargados (list): Lista de animes que no se han descargado.
-        archivo_salida (str): Nombre del archivo donde se guardarán los animes no descargados.
+    Cada elemento puede contener:
+        nombre
+        episodio_actual
+        episodios_totales
+        pendientes
+        episodio_buscado
     """
+
     try:
-        with open(archivo_salida, 'w', encoding='utf-8') as f:
-            for anime in animes_no_descargados:
-                f.write(anime + "\n")
+        directorio = os.path.dirname(archivo_salida)
+
+        if directorio:
+            os.makedirs(
+                directorio,
+                exist_ok=True
+            )
+
+        with open(
+            archivo_salida,
+            "w",
+            encoding="utf-8"
+        ) as archivo:
+
+            json.dump(
+                animes_no_descargados,
+                archivo,
+                ensure_ascii=False,
+                indent=4
+            )
+
+        print(
+            f"✅ Animes pendientes guardados en:\n"
+            f"{archivo_salida}"
+        )
+
+        return True
 
     except Exception as e:
-        print(f"Error al guardar los animes no descargados: {e}")
+
+        print(
+            f"❌ Error al guardar los animes pendientes: {e}"
+        )
+
+        return False
 
 
 def guardar_resultados_videos_txt(videos, filename):
@@ -67,13 +162,40 @@ def guardar_resultados_videos_txt(videos, filename):
 
 def leer_nombres_desde_txt(filename):
     try:
-        with open(filename, 'r', encoding='utf-8') as file:
-            # Leer las líneas y eliminar las líneas vacías o las líneas que no contienen datos relevantes
-            nombres = [line.strip()
-                       for line in file.readlines() if line.strip()]
-        return nombres
+        with open(
+            filename,
+            "r",
+            encoding="utf-8"
+        ) as file:
+
+            animes = json.load(file)
+
+        if not isinstance(animes, list):
+            print(
+                f"❌ El archivo '{filename}' "
+                "no contiene una lista de animes."
+            )
+            return []
+
+        return animes
+
     except FileNotFoundError:
-        print(f"El archivo '{filename}' no fue encontrado.")
+        print(
+            f"❌ El archivo '{filename}' "
+            "no fue encontrado."
+        )
+        return []
+
+    except json.JSONDecodeError as e:
+        print(
+            f"❌ Error leyendo el JSON '{filename}': {e}"
+        )
+        return []
+
+    except Exception as e:
+        print(
+            f"❌ Error leyendo '{filename}': {e}"
+        )
         return []
 
 
@@ -464,22 +586,103 @@ def limpiar_carpetas_descarga(
     )
 
 
+def guardar_resultados_animes_json(animes, filename):
+    """
+    Guarda la información completa de los animes en JSON.
+    """
+
+    try:
+        directorio = os.path.dirname(filename)
+
+        if directorio:
+            os.makedirs(
+                directorio,
+                exist_ok=True
+            )
+
+        with open(
+            filename,
+            "w",
+            encoding="utf-8"
+        ) as archivo:
+
+            json.dump(
+                animes,
+                archivo,
+                ensure_ascii=False,
+                indent=4
+            )
+
+        print(
+            f"✅ Animes guardados en: {filename}"
+        )
+
+        return True
+
+    except Exception as e:
+
+        print(
+            f"❌ Error guardando JSON: {e}"
+        )
+
+        return False
+
+
 def leer_nombres_animes_a_descargar(archivo_animes):
     """
-    Lee los nombres de los animes a descargar desde un archivo.
+    Lee los animes y toda su información desde un archivo JSON.
 
-    Args:
-        archivo_animes (str): Nombre del archivo que contiene los animes a descargar.
-
-    Returns:
-        list: Lista de nombres de los animes.
+    Retorna:
+        list: Lista de diccionarios con la información de cada anime.
     """
+
     try:
-        with open(archivo_animes, 'r', encoding='utf-8') as f:
-            animes = [linea.strip() for linea in f.readlines()]
+
+        with open(
+            archivo_animes,
+            "r",
+            encoding="utf-8"
+        ) as archivo:
+
+            animes = json.load(
+                archivo
+            )
+
+        if not isinstance(animes, list):
+
+            print(
+                "❌ El archivo no contiene "
+                "una lista válida de animes."
+            )
+
+            return []
+
         return animes
+
     except FileNotFoundError:
-        print(f"No se pudo encontrar el archivo {archivo_animes}.")
+
+        print(
+            f"❌ No se encontró el archivo: "
+            f"{archivo_animes}"
+        )
+
+        return []
+
+    except json.JSONDecodeError as e:
+
+        print(
+            f"❌ El JSON tiene un formato inválido: "
+            f"{e}"
+        )
+
+        return []
+
+    except Exception as e:
+
+        print(
+            f"❌ Error leyendo animes: {e}"
+        )
+
         return []
 
 
@@ -558,3 +761,38 @@ def eliminar_txt():
                 print(f"No se pudo eliminar {archivo}: {e}")
     else:
         print("Eliminación cancelada.")
+
+
+def extraer_episodio_archivo(nombre_archivo):
+    """
+    Extrae el número de episodio desde el nombre del archivo.
+
+    Ejemplos:
+        'Reiwa no Dara-san 7.mp4' -> 7
+        'Reiwa no Dara-san - 8.mp4' -> 8
+        'Anime_X_Episodio_12.mp4' -> 12
+
+    Retorna:
+        int o None
+    """
+
+    nombre = os.path.splitext(nombre_archivo)[0]
+
+    patrones = [
+        r'[Ee]pisodio[\s._-]*(\d+)$',
+        r'[\s._-]+(\d+)$'
+    ]
+
+    for patron in patrones:
+
+        coincidencia = re.search(
+            patron,
+            nombre
+        )
+
+        if coincidencia:
+            return int(
+                coincidencia.group(1)
+            )
+
+    return None

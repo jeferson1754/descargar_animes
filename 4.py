@@ -8,7 +8,7 @@ from animes.comparador import (
 )
 
 
-from utilidades.archivos import guardar_resultados_animes_txt, guardar_archivos_descargados, guardar_animes_no_descargados, leer_nombres_animes_a_descargar, mover_videos_y_limpiar_carpetas, eliminar_txt
+from utilidades.archivos import guardar_resultados_animes_txt, guardar_archivos_descargados, guardar_animes_no_descargados, leer_nombres_animes_a_descargar, mover_videos_y_limpiar_carpetas, eliminar_txt, guardar_resultados_animes_json
 from animes.comparador import obtener_archivos_descargados, comparar_descargas
 from download.descargar import flujo_descarga_animes
 
@@ -235,8 +235,8 @@ def menu_principal(download_dir):
 def menu():
 
     # Definir ambas rutas
-    ruta_1 = r"C:\Users\jvargas\Phyton\Descargar_Animes\descargas"
-    ruta_2 = r"D:\Xampp\htdocs\descargar_animes\Descargas"
+    ruta_1 = DOWNLOAD_DIR
+    ruta_2 = DOWNLOAD_DIR_2
 
     # Verificar si la primera ruta existe; si no, usar la segunda
     if os.path.exists(ruta_1):
@@ -258,7 +258,7 @@ def menu():
     nombres_anime = extraer_nombres_anime(url, download_dir)
 
     # Guardar los nombres en un archivo .txt
-    guardar_resultados_animes_txt(nombres_anime, "resultados_anime.txt")
+    guardar_resultados_animes_json(nombres_anime, "resultados_anime.txt")
 
     # Mostrar conteo y los nombres en la consola
     conteo_anime = len(nombres_anime)

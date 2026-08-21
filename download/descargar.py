@@ -573,9 +573,14 @@ def descargar_video_con_reintentos(
     
 def flujo_descarga_animes(file_name, download_dir):
     # Leer los videos desde el archivo .txt (solo nombres de animes)
-    nombres_animes = leer_nombres_desde_txt(
+    animes = leer_nombres_desde_txt(
         file_name
     )
+    
+    nombres_animes = [
+        anime["nombre"]
+        for anime in animes
+    ]
 
     if not nombres_animes:
 
