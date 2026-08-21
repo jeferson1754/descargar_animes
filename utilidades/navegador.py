@@ -1,4 +1,5 @@
 from selenium import webdriver
+import os
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -8,63 +9,68 @@ from selenium.webdriver.support import expected_conditions as EC
 
 
 def configurar_navegador(download_dir):
-    chrome_options = webdriver.ChromeOptions()
+    """
+    Configura Chrome usando Selenium Manager.
+    No requiere especificar manualmente ChromeDriver.
+    """
 
-    # Opciones para evitar errores
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-logging")
-    chrome_options.add_argument("--log-level=3")
-
-    chrome_options.add_argument('--ignore-certificate-errors')
-    chrome_options.add_argument('--allow-insecure-localhost')
-    chrome_options.add_argument('--ignore-ssl-errors=yes')
-
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--window-size=800,600")
-    chrome_options.add_argument("--headless")  # si lo deseas sin interfaz
-
-    # Configuración de descarga
-    chrome_options.add_experimental_option("prefs", {
-        "download.default_directory": download_dir,
-        "download.prompt_for_download": False,
-        "download.directory_upgrade": True,
-        "safebrowsing.enabled": True
-    })
-
-    # Lista de versiones de ChromeDriver a probar (de más nueva a más vieja)
-    versiones_a_probar = [
-        "151.0.7922.137",
-    ]
-
-    # Intentar cada versión hasta encontrar una que funcione
-    for version in versiones_a_probar:
-        try:
-            # print(f"Intentando ChromeDriver versión {version}...")
-            driver_path = ChromeDriverManager(driver_version=version).install()
-            # print(f"ChromeDriver {version} instalado en: {driver_path}")
-
-            # Probar inicializar el navegador
-            service = Service(driver_path)
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-            # print(f"✓ ChromeDriver {version} funcionando correctamente")
-            return driver
-
-        except Exception as e:
-            print(f"✗ ChromeDriver {version} falló: {str(e)[:100]}...")
-            continue
-
-    # Si ninguna versión funciona, usar webdriver-manager automático
     try:
-        print("Intentando con detección automática de versión...")
-        driver_path = ChromeDriverManager().install()
-        service = Service(executable_path=driver_path)
-        return webdriver.Chrome(service=service, options=chrome_options)
-    except Exception as e:
-        print(f"Error final: {e}")
 
+        options = webdriver.ChromeOptions()
+
+        # -----------------------------------------
+        # Opciones generales
+        # -----------------------------------------
+
+        options.add_argument("--disable-gpu")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-logging")
+        options.add_argument("--log-level=3")
+        options.add_argument("--window-size=800,600")
+
+        # Si quieres que funcione sin interfaz:
+        options.add_argument("--headless=new")
+
+        # -----------------------------------------
+        # Configuración de descargas
+        # -----------------------------------------
+
+        options.add_experimental_option(
+            "prefs",
+            {
+                "download.default_directory": download_dir,
+                "download.prompt_for_download": False,
+                "download.directory_upgrade": True,
+                "safebrowsing.enabled": True
+            }
+        )
+
+        # -----------------------------------------
+        # Selenium Manager
+        # -----------------------------------------
+
+        print(
+            "🌐 Iniciando Chrome mediante Selenium Manager..."
+        )
+
+        driver = webdriver.Chrome(
+            options=options
+        )
+
+        print(
+            "✅ Chrome iniciado correctamente."
+        )
+
+        return driver
+
+    except Exception as e:
+
+        print(
+            f"❌ No se pudo iniciar Chrome: {e}"
+        )
+
+        return 
 
 def configurar_navegador_inteligente(download_dir):
     """Versión inteligente que detecta la versión de Chrome automáticamente"""

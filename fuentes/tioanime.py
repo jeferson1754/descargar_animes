@@ -2,6 +2,7 @@ import requests
 import time
 from bs4 import BeautifulSoup
 import re
+import unicodedata
 from urllib.parse import urljoin
 import difflib
 from selenium.webdriver.common.by import By
@@ -9,7 +10,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 from utilidades.archivos import normalizar_nombre
+from utilidades.navegador import configurar_navegador
 
+
+URL_TIOANIME = "https://tioanime.com/anime/"
 
 def extraer_episodio_desde_url(url):
     match = re.search(r'-(\d+)$', url)
@@ -20,7 +24,7 @@ def extraer_episodio_desde_url(url):
     return None
 
 
-def buscar_pagina_principal(url, animes, max_intentos=3):
+def buscar_pagina_principal(url, anime, max_intentos=3):
     """
     Busca los animes en la página principal.
 
@@ -122,81 +126,79 @@ def buscar_pagina_principal(url, animes, max_intentos=3):
             # Comparar contra cada anime pendiente
             # ----------------------------------------------------
 
-            for anime in animes:
 
-                nombre_anime = anime["nombre"]
+            nombre_anime = anime["nombre"]
 
-                nombre_normalizado = normalizar_nombre(
-                    nombre_anime
-                )
+            nombre_normalizado = normalizar_nombre(
+                nombre_anime
+            )
+            
+            texto_normalizado = normalizar_nombre(
+                texto
+            )
 
-                texto_normalizado = normalizar_nombre(
-                    texto
-                )
+            coincidencias = difflib.get_close_matches(
+                nombre_normalizado,
+                [texto_normalizado],
+                n=1,
+                cutoff=0.7
+            )
 
-                coincidencias = difflib.get_close_matches(
-                    nombre_normalizado,
-                    [texto_normalizado],
-                    n=1,
-                    cutoff=0.7
-                )
+            if not coincidencias:
+                continue
 
-                if not coincidencias:
-                    continue
+            # ------------------------------------------------
+            # Obtener episodio de la URL
+            # ------------------------------------------------
 
-                # ------------------------------------------------
-                # Obtener episodio de la URL
-                # ------------------------------------------------
+            episodio = extraer_episodio_desde_url(
+                url_completa
+            )
+            
+            
+            episodio_buscado = anime.get("episodio_buscado")
 
-                episodio = extraer_episodio_desde_url(
-                    url_completa
-                )
-                
-                episodio_buscado = anime.get("episodio_buscado")
-
-                if episodio is None:
-                    print(
-                        f"⚠️ No se pudo determinar el episodio de: "
-                        f"{url_completa}"
-                    )
-                    continue
-
-                if episodio != episodio_buscado:
-                    print(
-                        f"⏭️ Episodio incorrecto: {episodio}. "
-                        f"Se necesita el episodio {episodio_buscado}."
-                    )
-                    continue
-
+            if episodio is None:
                 print(
-                    f"✅ Episodio correcto encontrado: "
-                    f"{episodio_buscado}"
+                    f"⚠️ No se pudo determinar el episodio de: "
+                    f"{url_completa}"
                 )
+                continue
 
-                # ------------------------------------------------
-                # Crear resultado conservando información
-                # del anime original
-                # ------------------------------------------------
+            if episodio != episodio_buscado:
+                print(
+                    f"⏭️ Episodio incorrecto: {episodio}. "
+                    f"Se necesita el episodio {episodio_buscado}."
+                )
+                continue
 
-                nuevo_video = {
-                    "nombre": texto,
-                    "nombre_anime": nombre_anime,
-                    "enlace": url_completa,
-                    "episodio": episodio,
-                    "episodio_buscado": anime.get(
-                        "episodio_buscado"
-                    )
-                }
+            print(
+                f"✅ Episodio correcto encontrado: "
+                f"{episodio_buscado}"
+            )
 
-                # ------------------------------------------------
-                # Evitar duplicados
-                # ------------------------------------------------
+            # ------------------------------------------------
+            # Crear resultado conservando información
+            # del anime original
+            # ------------------------------------------------
 
-                if nuevo_video not in videos_encontrados:
+            nuevo_video = {
+                "nombre": texto,
+                "nombre_anime": nombre_anime,
+                "enlace": url_completa,
+                "episodio": episodio,
+                "episodio_buscado": episodio_buscado
+            }
 
-                    videos_encontrados.append(
-                        nuevo_video
-                    )
+            # ------------------------------------------------
+            # Evitar duplicados
+            # ------------------------------------------------
+
+            if nuevo_video not in videos_encontrados:
+
+                videos_encontrados.append(
+                    nuevo_video
+                )
 
         return videos_encontrados
 
@@ -208,38 +210,253 @@ def buscar_pagina_principal(url, animes, max_intentos=3):
 
         return []
 
-def buscar_videos_tioanime(url, nombres_videos):
+
+def buscar_videos_tioanime(driver, url, animes):
+
     """
-    Función principal para buscar videos en TioAnime.
+    Coordina la búsqueda en TioAnime.
     """
     print(f"🔍 Buscando videos en: {url}")
-    return buscar_pagina_principal(url, nombres_videos)
+
+    resultados = []
+
+    for anime in animes:
+
+        nombre = anime["nombre"]
+        episodio_buscado = anime.get("episodio_buscado")
+
+        print("\n" + "=" * 60)
+        print(f"📺 Anime: {nombre}")
+        print(f"🎯 Episodio buscado: {episodio_buscado}")
+        print("=" * 60)
 
 
-def obtener_ultimo_episodio(driver, url_anime, episodio_buscado=None):
-    print(f"📺 Consultando episodios: {url_anime}")
+        # ---------------------------------------------
+        # 1. Buscar en página principal
+        # ---------------------------------------------
 
-    driver.get(url_anime)
+        resultado = buscar_pagina_principal(
+            url,
+            anime
+        )
+
+        if resultado:
+
+            resultados.extend(resultado)
+            continue
+
+        print(
+            "ℹ️ No encontrado en página principal."
+        )
+        
+        # --------------------------------------------------
+        # 2. Buscar página específica del anime
+        # --------------------------------------------------
+        
+        nombre_url = convertir_nombre_url(
+                nombre
+        )
+
+        url_anime = (
+            URL_TIOANIME
+            + nombre_url
+        )
+
+        ultimo = obtener_ultimo_episodio(
+            driver,
+            url_anime
+        )
+
+        if not ultimo:
+
+            print(
+                f"❌ No se pudieron obtener episodios "
+                f"de {nombre}"
+            )
+
+            continue
+
+        ultimo_episodio = ultimo["episodio"]
+
+        print(
+            f"📊 Último disponible: "
+            f"{ultimo_episodio} | "
+            f"Buscado: {episodio_buscado}"
+        )
+        
+        
+        # --------------------------------------------------
+        # 3. Comprobar si el episodio ya salió
+        # --------------------------------------------------
+
+        
+        if (
+            episodio_buscado is not None
+            and ultimo_episodio < episodio_buscado
+        ):
+
+            print(
+                f"⏳ Todavía no salió el episodio "
+                f"{episodio_buscado}."
+            )
+
+            continue
+        
+        # --------------------------------------------------
+        # 4. Si el último es exactamente el buscado
+        # --------------------------------------------------
+
+        if ultimo_episodio == episodio_buscado:
+
+            resultado_anime = {
+                "nombre": (
+                    f"{nombre} "
+                    f"Episodio {episodio_buscado}"
+                ),
+                "nombre_anime": nombre,
+                "enlace": ultimo["url"],
+                "episodio": ultimo_episodio,
+                "episodio_buscado": episodio_buscado
+            }
+
+            resultados.append(
+                resultado_anime
+            )
+
+            print(
+                f"✅ Episodio {episodio_buscado} "
+                f"encontrado."
+            )
+
+            continue
+        
+        # --------------------------------------------------
+        # 5. El último episodio es mayor
+        # --------------------------------------------------
+
+        if ultimo_episodio > episodio_buscado:
+
+            print(
+                f"ℹ️ El último episodio disponible "
+                f"es {ultimo_episodio}, "
+                f"pero se busca {episodio_buscado}."
+            )
+
+            # Aquí después agregaremos:
+            # buscar_episodio(...)
+            #
+            # para localizar exactamente el episodio
+            # solicitado.
+
+
+    return resultados
+
+
+
+def obtener_ultimo_episodio(driver, url_anime, max_intentos=3):
+
+    if not url_anime:
+        print("❌ URL del anime vacía.")
+        return None
+    
+    print(
+        f"📺 Consultando episodios: {url_anime}"
+    )
+    
+    respuesta = None
+
+    # --------------------------------------------------
+    # Conexión con reintentos
+    # --------------------------------------------------
+
+    for intento in range(1, max_intentos + 1):
+
+        try:
+
+            respuesta = requests.get(
+                url_anime,
+                timeout=15
+            )
+
+            respuesta.raise_for_status()
+            
+        except requests.exceptions.RequestException as e:
+
+            print(
+                f"⚠️ Error consultando episodios "
+                f"(intento {intento}/{max_intentos}): {e}"
+            )
+
+            if intento < max_intentos:
+                print("🔄 Reintentando...")
+            else:
+                print(
+                    "❌ No se pudo acceder a la página."
+                )
+                return None
+
+    # --------------------------------------------------
+    # Procesar HTML
+    # --------------------------------------------------
 
     try:
-        elementos = WebDriverWait(driver, 15).until(
-            EC.presence_of_all_elements_located(
-                (
-                    By.CSS_SELECTOR,
-                    "a.fa-play-circle"
-                )
+        
+        driver.get(url_anime)
+
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "ul.episodes-list li")
             )
         )
 
+        html = driver.page_source
+
+        soup = BeautifulSoup(
+            html,
+            "html.parser"
+        )
+
+
         episodios = []
+
+        # Los episodios están dentro de:
+        # <a class="fa-play-circle ...">
+
+        lista = soup.find(
+            "ul",
+            class_="episodes-list"
+        )
+
+        if not lista:
+            print(
+                "❌ No se encontró la lista de episodios."
+            )
+            return None
+
+        elementos = lista.find_all("a")
+
+        print(
+            f"🔎 Episodios encontrados: "
+            f"{len(elementos)}"
+        )
 
         for elemento in elementos:
 
-            texto = elemento.text.strip()
+            elemento_episodio = elemento.select_one(
+                "p span"
+            )
+
+            if not elemento_episodio:
+                continue
+
+            texto_episodio = elemento_episodio.get_text(
+                " ",
+                strip=True
+            )
 
             match = re.search(
                 r"Episodio\s+(\d+)",
-                texto,
+                texto_episodio,
                 re.IGNORECASE
             )
 
@@ -248,7 +465,15 @@ def obtener_ultimo_episodio(driver, url_anime, episodio_buscado=None):
 
             numero = int(match.group(1))
 
-            enlace = elemento.get_attribute("href")
+            href = elemento.get("href")
+
+            if not href:
+                continue
+
+            enlace = urljoin(
+                url_anime,
+                href
+            )
 
             episodios.append({
                 "episodio": numero,
@@ -259,9 +484,21 @@ def obtener_ultimo_episodio(driver, url_anime, episodio_buscado=None):
                 f"🎬 Episodio {numero}: {enlace}"
             )
 
+        # --------------------------------------------------
+        # Comprobar resultados
+        # --------------------------------------------------
+
         if not episodios:
-            print("❌ No se encontraron episodios.")
+
+            print(
+                "❌ No se encontraron episodios."
+            )
+
             return None
+
+        # --------------------------------------------------
+        # Obtener el mayor episodio
+        # --------------------------------------------------
 
         ultimo = max(
             episodios,
@@ -282,11 +519,12 @@ def obtener_ultimo_episodio(driver, url_anime, episodio_buscado=None):
     except Exception as e:
 
         print(
-            f"❌ Error obteniendo episodios: {e}"
+            f"❌ Error procesando episodios: {e}"
         )
 
         return None
-
+  
+    
 def buscar_boton_descarga(driver, video_url):
     try:
         driver.get(video_url)
@@ -305,3 +543,38 @@ def buscar_boton_descarga(driver, video_url):
     except Exception as e:
         print(f"Error al acceder a {video_url}: {e}")
         return None
+
+
+def convertir_nombre_url(nombre):
+    """
+    Convierte un nombre de anime a formato slug para URL.
+
+    Ejemplo:
+        'Sayonara Lara' -> 'sayonara-lara'
+    """
+
+    # Minúsculas
+    nombre = nombre.lower()
+
+    # Eliminar tildes
+    nombre = unicodedata.normalize(
+        "NFKD",
+        nombre
+    ).encode(
+        "ascii",
+        "ignore"
+    ).decode(
+        "ascii"
+    )
+
+    # Reemplazar todo lo que no sea letra o número por "-"
+    nombre = re.sub(
+        r"[^a-z0-9]+",
+        "-",
+        nombre
+    )
+
+    # Eliminar "-" del principio y final
+    nombre = nombre.strip("-")
+
+    return nombre

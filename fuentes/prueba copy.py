@@ -5,15 +5,8 @@ from bs4 import BeautifulSoup
 import requests
 from urllib.parse import urljoin
 
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from utilidades.navegador import configurar_navegador
-
-from config import DOWNLOAD_DIR
-
-
 URL_TIOANIME = "https://tioanime.com/anime/"
+
 
 def convertir_nombre_url(nombre):
     """
@@ -50,18 +43,20 @@ def convertir_nombre_url(nombre):
     return nombre
 
 
-def obtener_ultimo_episodio(url_anime, max_intentos=3):
-    
-    driver = configurar_navegador(DOWNLOAD_DIR)
+def prueba(url_anime, max_intentos=3):
+
+    print("=" * 60)
+    print("PRUEBA DE BÚSQUEDA EN TIOANIME")
+    print("=" * 60)
 
     if not url_anime:
-            print("❌ URL del anime vacía.")
-            return None
-    
+           print("❌ URL del anime vacía.")
+           return None
+   
     print(
-            f"📺 Consultando episodios: {url_anime}"
+        f"📺 Consultando episodios: {url_anime}"
     )
-    
+
     respuesta = None
 
     # --------------------------------------------------
@@ -78,7 +73,9 @@ def obtener_ultimo_episodio(url_anime, max_intentos=3):
             )
 
             respuesta.raise_for_status()
-            
+
+            break
+
         except requests.exceptions.RequestException as e:
 
             print(
@@ -99,129 +96,44 @@ def obtener_ultimo_episodio(url_anime, max_intentos=3):
     # --------------------------------------------------
 
     try:
-        
-        driver.get(url_anime)
-
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "ul.episodes-list li")
-            )
-        )
-
-        html = driver.page_source
 
         soup = BeautifulSoup(
-            html,
+            respuesta.text,
             "html.parser"
         )
-
-        bloque = soup.find(
-            "ul",
-            class_="episodes-list"
-        )
-
-        if bloque:
-            print("✅ Se encontró <ul class='episodes-list'>")
-
-            print("\nHTML encontrado:")
-            print(
-                bloque.prettify()[:5000]
-            )
-
-            enlaces = bloque.find_all("a")
-
-            print(
-                f"\n🔗 Enlaces encontrados dentro de la lista: "
-                f"{len(enlaces)}"
-            )
-
-            for enlace in enlaces[:5]:
-                print(
-                    "HREF:",
-                    enlace.get("href")
-                )
-
-                print(
-                    "CLASE:",
-                    enlace.get("class")
-                )
-
-                print(
-                    "TEXTO:",
-                    enlace.get_text(" ", strip=True)
-                )
-
-        else:
-            print(
-                "❌ BeautifulSoup no encontró "
-                "<ul class='episodes-list'>"
-            )
 
         episodios = []
 
         # Los episodios están dentro de:
         # <a class="fa-play-circle ...">
 
-        print(
-            "Cantidad de elementos encontrados:",
-            len(soup.select("ul.episodes-list a.fa-play-circle"))
-        )
-
-        lista = soup.find(
-            "ul",
-            class_="episodes-list"
-        )
-
-        if lista:
-
-            elementos = lista.find_all(
-                "a"
-            )
-
-            print(
-                f"🔎 Encontrados: {len(elementos)}"
-            )
-
-            for elemento in elementos:
-
-                print(
-                    elemento.get("href"),
-                    elemento.get_text(
-                        " ",
-                        strip=True
-                    )
-                )
-        print(
-            f"🔎 Episodios encontrados en HTML: "
-            f"{len(elementos)}"
+        elementos = soup.select(
+            "a.fa-play-circle"
         )
 
         for elemento in elementos:
 
-            elemento_episodio = elemento.select_one(
-                "p span"
-            )
-
-            if not elemento_episodio:
-                continue
-
-            texto_episodio = elemento_episodio.get_text(
+            texto = elemento.get_text(
                 " ",
                 strip=True
             )
 
             match = re.search(
                 r"Episodio\s+(\d+)",
-                texto_episodio,
+                texto,
                 re.IGNORECASE
             )
 
             if not match:
                 continue
 
-            numero = int(match.group(1))
+            numero = int(
+                match.group(1)
+            )
 
-            href = elemento.get("href")
+            href = elemento.get(
+                "href"
+            )
 
             if not href:
                 continue
@@ -304,4 +216,4 @@ if __name__ == "__main__":
 
 
     
-    obtener_ultimo_episodio(url_busqueda)
+    prueba(url_busqueda)

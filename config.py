@@ -1,4 +1,4 @@
-from fuentes.tioanime import buscar_pagina_principal
+from fuentes.tioanime import buscar_videos_tioanime
 
 
 # ============================================================
@@ -19,7 +19,7 @@ FUENTES_ANIME = [
         "nombre": "TioAnime",
         "url": "https://tioanime.com/",
         "activa": True,
-        "buscar": buscar_pagina_principal
+        "buscar": buscar_videos_tioanime
     }
 ]
 

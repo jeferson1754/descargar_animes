@@ -5,8 +5,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-from fuentes.tioanime import buscar_pagina_principal
 from utilidades.navegador import configurar_navegador
+from config import DOWNLOAD_DIR
 
 
 def extraer_nombres_anime(url, download_dir):
@@ -20,6 +20,12 @@ def extraer_nombres_anime(url, download_dir):
     """
 
     driver = configurar_navegador(download_dir)
+    
+    if driver is None:
+        print(
+            "❌ No se pudo iniciar el navegador."
+        )
+        return []
 
     try:
         driver.get(url)
@@ -163,19 +169,28 @@ def extraer_nombres_anime(url, download_dir):
         driver.quit()
 
 
-def buscar_en_fuentes(nombres_animes, fuentes):
+def buscar_en_fuentes(animes, fuentes):
     """
     Busca cada anime en las fuentes disponibles.
-    Prueba las fuentes en orden hasta encontrar un resultado.
+    Prueba las fuentes en orden hasta encontrar el
+    episodio solicitado.
     """
 
     resultados = []
 
-    for anime in nombres_animes:
+    driver_capitulos = configurar_navegador(
+        DOWNLOAD_DIR
+    )
+
+    for anime in animes:
+
+        nombre = anime.get("nombre")
+        episodio_buscado = anime.get("episodio_buscado")
 
         print("\n" + "=" * 60)
+        print(f"🔎 Buscando: {nombre}")
         print(
-            f"🔎 Buscando: {anime['nombre']}"
+            f"🎯 Episodio: {episodio_buscado}"
         )
         print("=" * 60)
 
@@ -198,8 +213,10 @@ def buscar_en_fuentes(nombres_animes, fuentes):
             try:
 
                 videos = funcion_busqueda(
+                    driver_capitulos,
                     url_fuente,
                     [anime]
+
                 )
 
                 if videos:
@@ -220,25 +237,27 @@ def buscar_en_fuentes(nombres_animes, fuentes):
                     )
 
                     encontrado = True
-
                     break
 
                 print(
-                    f"❌ No encontrado en "
-                    f"{nombre_fuente}"
+                    f"❌ {nombre_fuente}: "
+                    f"episodio no encontrado."
                 )
 
             except Exception as e:
 
                 print(
                     f"⚠️ Error en "
-                    f"{nombre_fuente}: {e}"
+                    f"{nombre_fuente}: {type(e).__name__}: {e}"
                 )
 
         if not encontrado:
 
             print(
-                f"❌ No se encontró: "
-                f"{anime['nombre']}"
+                f"❌ No se encontró "
+                f"{nombre} "
+                f"episodio {episodio_buscado}"
             )
+
+    driver_capitulos.quit()
     return resultados

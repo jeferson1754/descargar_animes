@@ -196,6 +196,13 @@ def buscar_enlace_descarga_y_actualizar(driver, videos_encontrados):
     return videos_con_descarga
 
 def buscar_boton_descarga(driver, video_url):
+    
+    if driver is None:
+        print(
+            "❌ No hay driver disponible."
+        )
+        return None
+    
     try:
         driver.get(video_url)
         time.sleep(5)  # Espera para que la página cargue
@@ -601,15 +608,31 @@ def flujo_descarga_animes(file_name, download_dir):
         print("No se encontraron videos para los animes indicados.")
         return False
 
-    # Iniciar el navegador para buscar los enlaces de descarga
     driver = configurar_navegador(download_dir)
 
-    # Paso 2: Buscar los enlaces de descarga de Mega y actualizar la lista
-    videos_finales = buscar_enlace_descarga_y_actualizar(
-        driver, videos_encontrados)
+    if driver is None:
+        print(
+            "❌ No se pudo iniciar el navegador para "
+            "obtener los enlaces de descarga."
+        )
+        return False
 
-    # Cerra el driver después de obtener los enlaces de Mega
-    driver.quit()
+    try:
+
+        videos_finales = buscar_enlace_descarga_y_actualizar(
+            driver,
+            videos_encontrados
+        )
+
+    finally:
+
+        try:
+            driver.quit()
+            print("🔒 Driver cerrado.")
+        except Exception as e:
+            print(
+                f"⚠️ No se pudo cerrar el driver: {e}"
+            )
 
     # Paso 3: Guardar resultados de videos encontrados (ahora con el link de descarga)
     guardar_resultados_videos_txt(
