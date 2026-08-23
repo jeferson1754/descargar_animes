@@ -9,3 +9,7 @@ descargas/*
 __pycache__/
 **/__pycache__/
 *.pyc
+
+# Credenciales Google
+client_secret.json
+token.pickle
