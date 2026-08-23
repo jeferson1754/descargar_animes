@@ -4,6 +4,7 @@ import re
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 
 from utilidades.navegador import configurar_navegador
 from config import DOWNLOAD_DIR
@@ -11,57 +12,51 @@ from config import DOWNLOAD_DIR
 
 def extraer_nombres_anime(url, download_dir):
     """
-    Extrae de la tabla:
-    - nombre del anime
-    - episodio actual
-    - total de episodios
-    - episodios pendientes
-    - episodio que se debe buscar
+    Extrae únicamente los animes que tienen episodios pendientes 
+    detectando la clase 'episode-badge episode-pending'.
     """
 
     driver = configurar_navegador(download_dir)
     
     if driver is None:
-        print(
-            "❌ No se pudo iniciar el navegador."
-        )
+        print("❌ No se pudo iniciar el navegador.")
         return []
 
     try:
         driver.get(url)
 
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "#animeTable tbody tr")
+        # 1. Esperar a que la tabla o el cuerpo cargue
+        try:
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#animeTable tbody"))
             )
-        )
+        except TimeoutException:
+            print("⚠️ No se encontró la tabla de animes o la página demoró en cargar.")
+            return []
 
-        filas = driver.find_elements(
-            By.CSS_SELECTOR,
-            "#animeTable tbody tr"
-        )
+        # 2. BÚSQUEDA FILTRADA: Selecciona solo filas (tr) que tengan la etiqueta 'episode-pending'
+        selector_pendientes = "#animeTable tbody tr:has(.episode-badge.episode-pending)"
+        
+        filas_pendientes = driver.find_elements(By.CSS_SELECTOR, selector_pendientes)
+
+        # Respaldo: Si el navegador no soporta el pseudoselect :has(), usamos un filtro iterativo
+        if not filas_pendientes:
+            todas_las_filas = driver.find_elements(By.CSS_SELECTOR, "#animeTable tbody tr")
+            filas_pendientes = [
+                f for f in todas_las_filas 
+                if len(f.find_elements(By.CSS_SELECTOR, ".episode-badge.episode-pending")) > 0
+            ]
 
         animes = []
 
-        for fila in filas:
-
+        for fila in filas_pendientes:
             try:
                 # ==========================================
                 # NOMBRE DEL ANIME
                 # ==========================================
-
-                elemento_nombre = fila.find_element(
-                    By.CSS_SELECTOR,
-                    "td.fw-500"
-                )
-
+                elemento_nombre = fila.find_element(By.CSS_SELECTOR, "td.fw-500")
                 nombre = driver.execute_script(
-                    """
-                    return arguments[0]
-                        .childNodes[0]
-                        .textContent
-                        .trim();
-                    """,
+                    "return arguments[0].childNodes[0].textContent.trim();", 
                     elemento_nombre
                 )
 
@@ -69,83 +64,28 @@ def extraer_nombres_anime(url, download_dir):
                     continue
 
                 # ==========================================
-                # PROGRESO
-                # Ejemplo: 7/12
+                # PROGRESO (Ejemplo: 7/12)
                 # ==========================================
+                progreso_elemento = fila.find_element(By.CSS_SELECTOR, ".progress-cell span.small")
+                texto_progreso = progreso_elemento.text.strip()
 
-                progreso_elemento = fila.find_element(
-                    By.CSS_SELECTOR,
-                    ".progress-cell span.small"
-                )
-
-                texto_progreso = (
-                    progreso_elemento.text.strip()
-                )
-
-                match_progreso = re.search(
-                    r"(\d+)\s*/\s*(\d+)",
-                    texto_progreso
-                )
-
+                match_progreso = re.search(r"(\d+)\s*/\s*(\d+)", texto_progreso)
                 if not match_progreso:
-                    print(
-                        f"⚠️ No se pudo obtener "
-                        f"el progreso de: {nombre}"
-                    )
                     continue
 
-                episodio_actual = int(
-                    match_progreso.group(1)
-                )
-
-                episodios_totales = int(
-                    match_progreso.group(2)
-                )
+                episodio_actual = int(match_progreso.group(1))
+                episodios_totales = int(match_progreso.group(2))
 
                 # ==========================================
                 # EPISODIOS PENDIENTES
-                # Ejemplo: 1 pendientes
                 # ==========================================
+                estado_elemento = fila.find_element(By.CSS_SELECTOR, ".episode-badge.episode-pending")
+                match_pendientes = re.search(r"(\d+)", estado_elemento.text.strip())
+                
+                pendientes = int(match_pendientes.group(1)) if match_pendientes else 1
 
-                pendientes = 0
-
-                try:
-                    estado_elemento = fila.find_element(
-                        By.CSS_SELECTOR,
-                        "td:nth-child(3) .episode-badge"
-                    )
-
-                    texto_estado = (
-                        estado_elemento.text.strip()
-                    )
-
-                    match_pendientes = re.search(
-                        r"(\d+)",
-                        texto_estado
-                    )
-
-                    if match_pendientes:
-                        pendientes = int(
-                            match_pendientes.group(1)
-                        )
-
-                except Exception:
-                    pendientes = 0
-
-                # ==========================================
-                # EPISODIO QUE DEBEMOS BUSCAR
-                # ==========================================
-
-                if pendientes > 0:
-                    episodio_buscado = (
-                        episodio_actual + 1
-                    )
-                else:
-                    episodio_buscado = None
-
-                # ==========================================
-                # GUARDAR RESULTADO
-                # ==========================================
+                # El episodio a buscar siempre es el siguiente al actual
+                episodio_buscado = episodio_actual + 1
 
                 anime = {
                     "nombre": nombre,
@@ -158,16 +98,12 @@ def extraer_nombres_anime(url, download_dir):
                 animes.append(anime)
 
             except Exception as e:
-
-                print(
-                    f"⚠️ Error procesando una fila: {e}"
-                )
+                print(f"⚠️ Error procesando fila con pendiente: {e}")
 
         return animes
 
     finally:
         driver.quit()
-
 
 def buscar_en_fuentes(animes, fuentes):
     """

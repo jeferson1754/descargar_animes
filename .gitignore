@@ -1,11 +1,11 @@
-# Ignorar todos los archivos .mp4 en la carpeta descargas
+# Descargas
 descargas/*
-# Ignorar todos los archivos .txt
-*.txt
 
-# Exceptuar requirements.txt
+# Todos los .txt excepto requirements.txt
+*.txt
 !requirements.txt
 
-# Archivos de caché de Python
+# Caché de Python
+__pycache__/
 **/__pycache__/
 *.pyc

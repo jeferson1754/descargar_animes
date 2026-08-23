@@ -1,5 +1,5 @@
 import os
-from config import DOWNLOAD_DIR, DOWNLOAD_DIR_2
+from config import DOWNLOAD_DIR, DOWNLOAD_DIR_2, SERVIDOR
 from animes.buscador import extraer_nombres_anime
 
 from animes.comparador import (
@@ -34,89 +34,45 @@ def procesar_animes(
         download_dir
     )
 
-    archivos_descargados = obtener_archivos_descargados(
-        download_dir
-    )
-
     animes_a_descargar = leer_nombres_animes_a_descargar(
         archivo_animes
     )
-
+    
     if not animes_a_descargar:
-
-        print(
-            "❌ No se encontraron animes para descargar."
-        )
-
+        print("✅ No hay animes pendientes por descargar según la base de datos.")
+        # Limpiamos los archivos de registro anteriores
+        guardar_animes_no_descargados([], archivo_resultado_no_descargados)
         return False
-
     # --------------------------------------------------
     # No hay archivos descargados todavía
     # --------------------------------------------------
 
-    if not archivos_descargados:
-
-        print(
-            "📁 No se encontraron archivos descargados."
-        )
-
-        guardar_animes_no_descargados(
-            animes_a_descargar,
-            archivo_resultado_no_descargados
-        )
-
-        return True
+    print(f"\n📺 Animes pendientes por procesar ({len(animes_a_descargar)}):")
+    for anime in animes_a_descargar:
+        print(f"   • {anime}")
 
     # --------------------------------------------------
     # Registrar archivos descargados
     # --------------------------------------------------
-
-    guardar_archivos_descargados(
-        archivos_descargados,
-        archivo_resultado_descargados
+    # 2. Registrar la lista directa devuelta por la base de datos como los "pendientes" actuales
+    guardar_animes_no_descargados(
+        animes_a_descargar,
+        archivo_resultado_no_descargados
     )
 
     # --------------------------------------------------
     # Comparar
     # --------------------------------------------------
-
-    animes_no_descargados = comparar_descargas(
-        animes_a_descargar,
-        archivos_descargados
-    )
-
-    if not animes_no_descargados:
-
-        print(
-            "✅ Todos los animes ya han sido descargados."
+# 3. Opcional: Obtener y guardar una lista de los archivos .mp4/.mkv que tienes localmente como respaldo visual
+    archivos_locales = obtener_archivos_descargados(download_dir)
+    if archivos_locales:
+        guardar_archivos_descargados(
+            archivos_locales,
+            archivo_resultado_descargados
         )
 
-    else:
 
-        print(
-            "\n📺 Animes pendientes:"
-        )
-
-        for anime in animes_no_descargados:
-
-            print(
-                f"   • {anime}"
-            )
-
-    # --------------------------------------------------
-    # Guardar pendientes
-    # --------------------------------------------------
-
-    # --------------------------------------------------
-    # Guardar pendientes
-    # --------------------------------------------------
-
-    guardar_animes_no_descargados(
-        animes_no_descargados,
-        archivo_resultado_no_descargados
-    )
-
-    return bool(animes_no_descargados)
+    return bool(animes_a_descargar)
 
 
 # ============================================================
@@ -154,14 +110,11 @@ def menu_dias():
             return None
 
         if opcion in dias:
-
             dia = dias[opcion]
+            # Corrección: Uso de f-string para construir la URL de forma limpia
+            return f"{SERVIDOR}Anime/Emision/descargar.php?dias={dia}&enviar2=&accion=Filtro"
 
-            return (
-                "https://inventarioncc.infinityfreeapp.com/"
-                f"Anime/Emision/?dias={dia}"
-                "&enviar2=&accion=Filtro"
-            )
+        print("❌ Opción inválida.")
 
         print(
             "❌ Opción inválida."
@@ -189,23 +142,15 @@ def menu_principal(download_dir):
         ).strip()
 
         if opcion == "1":
-
-            return (
-                "https://inventarioncc.infinityfreeapp.com/"
-                "Anime/Emision/?enviar=&accion=HOY"
-            )
+            # Corrección: Formateo con f-string para devolver la cadena completa
+            return f"{SERVIDOR}Anime/Emision/descargar.php?enviar=&accion=HOY"
 
         elif opcion == "2":
-
-            return (
-                "https://inventarioncc.infinityfreeapp.com/"
-                "Anime/Emision/?faltantes=&accion=HOY"
-            )
+            # Corrección: Formateo con f-string (evita el fallo por falta de '+')
+            return f"{SERVIDOR}Anime/Emision/descargar.php?faltantes=&accion=HOY"
 
         elif opcion == "3":
-
             url = menu_dias()
-
             if url:
                 return url
 
