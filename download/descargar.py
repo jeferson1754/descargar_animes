@@ -7,7 +7,7 @@ import os
 from utilidades.archivos import leer_nombres_desde_txt, guardar_resultados_videos_txt
 from utilidades.navegador import configurar_navegador
 from animes.buscador import buscar_en_fuentes
-from config import FUENTES_ANIME
+from config import FUENTES_ANIME,SERVIDOR
 
 
 
@@ -175,6 +175,28 @@ def verificar_descarga(
     )
 
     return None
+
+def marcar_anime_descargado_con_selenium(driver, nombre_anime, episodio):
+    """
+    Navega a la URL del servidor web con Selenium para marcar el anime como descargado.
+    """
+    try:
+        # Construye la URL de actualización con los parámetros necesarios (ajusta según tu PHP)
+        url_servidor = f"{SERVIDOR}/Anime/Emision/actualizar.php?nombre_anime={nombre_anime}&episodio={episodio}"
+        print(f"🌐 Actualizando servidor mediante Selenium: {nombre_anime} - Ep {episodio} / {url_servidor}")
+        
+        # El navegador entra a la página de actualización
+        driver.get(url_servidor)
+        
+        # Opcional: Pequeña pausa para asegurar que el servidor procese la petición en la base de datos
+        time.sleep(2)
+        
+        print(f"✅ Servidor actualizado exitosamente.")
+        return True
+        
+    except Exception as e:
+        print(f"⚠️ Error al actualizar el servidor con Selenium: {e}")
+        return False
 
 def buscar_enlace_descarga_y_actualizar(driver, videos_encontrados):
     """Busca el enlace de descarga (Mega) para cada video y lo agrega a la lista."""
@@ -405,12 +427,8 @@ def hacer_click_en_boton_descarga(
         time.sleep(3)
 
         # --------------------------------------------------
-        # 2. Esperar botón
+        # 2. Detectar servidor
         # --------------------------------------------------
-
-        # -----------------------------------------
-        # Detectar servidor
-        # -----------------------------------------
 
         servidor = detectar_servidor_descarga(
             driver
@@ -420,9 +438,37 @@ def hacer_click_en_boton_descarga(
             f"🌐 Servidor detectado: {servidor}"
         )
 
-        # -----------------------------------------
-        # Buscar botón correspondiente
-        # -----------------------------------------
+        # --------------------------------------------------
+        # 3. Validación específica para MEGA (Errores comunes)
+        # --------------------------------------------------
+
+        if servidor == "mega":
+            print("🔍 Verificando estado del archivo en Mega...")
+            try:
+                # Damos un par de segundos por si Mega tarda en renderizar el aviso en pantalla
+                time.sleep(2)
+                
+                texto_pagina = driver.page_source.lower()
+                
+                # Verificamos si aparece el mensaje exacto o variaciones comunes
+                if "el archivo ya no está disponible" in texto_pagina or "file no longer available" in texto_pagina:
+                    print(f"❌ Error en Mega: El archivo ya no está disponible.")
+                    return False
+                
+                if "archivo no encontrado" in texto_pagina or "file not found" in texto_pagina:
+                    print(f"❌ Error en Mega: El archivo no fue encontrado o fue eliminado.")
+                    return False
+                
+                if "cuota de transferencia agotada" in texto_pagina or "bandwidth quota exceeded" in texto_pagina or "quota exceeded" in texto_pagina:
+                    print(f"⚠️ Error en Mega: Se ha agotado la cuota de transferencia.")
+                    return False
+                    
+            except Exception as e:
+                print(f"⚠️ No se pudo verificar el estado de Mega: {e}")
+
+        # --------------------------------------------------
+        # 4. Buscar botón correspondiente
+        # --------------------------------------------------
 
         boton_descarga = encontrar_boton_descarga(
             driver,
@@ -449,7 +495,7 @@ def hacer_click_en_boton_descarga(
         )
 
         # --------------------------------------------------
-        # 4. Esperar confirmación REAL
+        # 5. Esperar confirmación REAL
         # --------------------------------------------------
 
         archivo_descargado = verificar_descarga(
@@ -461,7 +507,7 @@ def hacer_click_en_boton_descarga(
         )
 
         # --------------------------------------------------
-        # 5. Resultado
+        # 6. Resultado
         # --------------------------------------------------
 
         if archivo_descargado:
@@ -493,7 +539,7 @@ def hacer_click_en_boton_descarga(
         )
 
         return False
-
+    
 def descargar_video_con_reintentos(
     video,
     download_dir,
@@ -579,28 +625,41 @@ def descargar_video_con_reintentos(
     return False
     
 def flujo_descarga_animes(file_name, download_dir):
-    # Leer los videos desde el archivo .txt (solo nombres de animes)
-    animes = leer_nombres_desde_txt(
-        file_name
-    )
+ # Leer los datos desde el archivo .json / .txt
+    datos_crudos = leer_nombres_desde_txt(file_name)
     
-    nombres_animes = [
-        anime["nombre"]
-        for anime in animes
-    ]
-
-    if not nombres_animes:
-
-        print(
-            "❌ No hay animes pendientes para buscar."
-        )
-
+    if not datos_crudos:
+        print("❌ No hay animes pendientes para buscar.")
         return False
 
-    # Paso 1: Buscar videos relacionados con los animes
+    # Expandir los animes según sus episodios pendientes
+    animes_a_buscar = []
+    
+    for item in datos_crudos:
+        nombre = item.get("nombre")
+        episodio_actual = item.get("episodio_actual", 0)
+        pendientes = item.get("pendientes", 0)
+        
+        # Si hay pendientes, creamos una tarea individual por cada episodio faltante
+        if pendientes > 0:
+            for i in range(1, pendientes + 1):
+                ep_buscado = episodio_actual + i
+                animes_a_buscar.append({
+                    "nombre": nombre,
+                    "episodio_buscado": ep_buscado
+                })
+        else:
+            # Por si acaso viene un formato con episodio ya definido
+            animes_a_buscar.append(item)
+
+    if not animes_a_buscar:
+        print("❌ No hay episodios pendientes para procesar.")
+        return False
+
+    # Paso 1: Buscar videos relacionados con cada episodio pendiente
     print("Buscando videos relacionados...")
     videos_encontrados = buscar_en_fuentes(
-        animes,
+        animes_a_buscar,
         FUENTES_ANIME
     )
 
@@ -639,17 +698,13 @@ def flujo_descarga_animes(file_name, download_dir):
         videos_finales, "resultados_videos_con_descarga.txt")
 
     # Paso 4: Mostrar la información completa antes de preguntar
-
-    # Formatear la lista de animes con los nuevos detalles para la confirmación
     videos_para_mostrar = []
     for video in videos_finales:
-        # Crea una cadena legible que incluye el link de descarga
         detalles = (
             f'"nombre": "{video["nombre"]}",\n'
             f'"link_video": "{video["enlace"]}"\n'
-            # Agregada '\n' aquí
             f'"link_descarga": "{video["link_descarga"]}"\n'
-            + "-" * 40 + "\n"  # Agregado el signo '+'
+            + "-" * 40 + "\n"
         )
         videos_para_mostrar.append(detalles)
 
@@ -664,6 +719,9 @@ def flujo_descarga_animes(file_name, download_dir):
 
     print("\nIniciando descargas automáticamente...")
 
+    # Abrimos un navegador con Selenium exclusivo para ir actualizando el servidor tras cada descarga exitosa
+    driver_servidor = configurar_navegador(download_dir)
+
     for video in videos_finales:
 
         if (
@@ -673,7 +731,7 @@ def flujo_descarga_animes(file_name, download_dir):
 
             print(
                 f"⚠️ Saltando {video['nombre']}: "
-                "enlace no disponible."
+                f"enlace no disponible."
             )
 
             continue
@@ -687,11 +745,13 @@ def flujo_descarga_animes(file_name, download_dir):
 
         print("=" * 60)
 
+        
         resultado = descargar_video_con_reintentos(
             video,
             download_dir,
             max_intentos=3
         )
+        
 
         if not resultado:
 
@@ -699,3 +759,24 @@ def flujo_descarga_animes(file_name, download_dir):
                 f"❌ No se pudo descargar: "
                 f"{video['nombre']}"
             )
+        else:
+            print(f"✅ Video descargado correctamente.")
+            
+            # Corregido: Usamos 'video' en lugar de 'animes' y aseguramos que existan las llaves
+            nombre_servidor = video.get('nombre_anime')
+            episodio_servidor = video.get('episodio_buscado') or video.get('episodio')
+            
+            if nombre_servidor and episodio_servidor:
+                marcar_anime_descargado_con_selenium(
+                    driver_servidor, 
+                    nombre_servidor, 
+                    episodio_servidor
+                )
+            else:
+                print("⚠️ No se pudieron obtener los datos exactos para actualizar el servidor.")
+
+    # Cerramos el driver del servidor al terminar todas las descargas
+    try:
+        driver_servidor.quit()
+    except:
+        pass

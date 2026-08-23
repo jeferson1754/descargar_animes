@@ -4,304 +4,202 @@ import unicodedata
 from bs4 import BeautifulSoup
 import requests
 from urllib.parse import urljoin
+import time
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+
+
+import sys
+import os
+
+# Agrega la raíz del proyecto al path de Python para evitar errores de importación
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from utilidades.navegador import configurar_navegador
+from config import DOWNLOAD_DIR_2
+from download.descargar import detectar_servidor_descarga,encontrar_boton_descarga,verificar_descarga
 
-from config import DOWNLOAD_DIR
 
-
-URL_TIOANIME = "https://tioanime.com/anime/"
-
-def convertir_nombre_url(nombre):
+def hacer_click_en_boton_descarga(
+    driver,
+    enlace_descarga,
+    download_dir,
+    nombre_video
+):
     """
-    Convierte un nombre de anime a formato slug para URL.
+    Inicia una descarga y espera hasta confirmar
+    que apareció un archivo nuevo y terminó de crecer.
 
-    Ejemplo:
-        'Sayonara Lara' -> 'sayonara-lara'
+    Devuelve:
+        True  -> descarga confirmada
+        False -> descarga fallida
     """
-
-    # Minúsculas
-    nombre = nombre.lower()
-
-    # Eliminar tildes
-    nombre = unicodedata.normalize(
-        "NFKD",
-        nombre
-    ).encode(
-        "ascii",
-        "ignore"
-    ).decode(
-        "ascii"
-    )
-
-    # Reemplazar todo lo que no sea letra o número por "-"
-    nombre = re.sub(
-        r"[^a-z0-9]+",
-        "-",
-        nombre
-    )
-
-    # Eliminar "-" del principio y final
-    nombre = nombre.strip("-")
-
-    return nombre
-
-
-def obtener_ultimo_episodio(url_anime, max_intentos=3):
-    
-    driver = configurar_navegador(DOWNLOAD_DIR)
-
-    if not url_anime:
-            print("❌ URL del anime vacía.")
-            return None
-    
-    print(
-            f"📺 Consultando episodios: {url_anime}"
-    )
-    
-    respuesta = None
-
-    # --------------------------------------------------
-    # Conexión con reintentos
-    # --------------------------------------------------
-
-    for intento in range(1, max_intentos + 1):
-
-        try:
-
-            respuesta = requests.get(
-                url_anime,
-                timeout=15
-            )
-
-            respuesta.raise_for_status()
-            
-        except requests.exceptions.RequestException as e:
-
-            print(
-                f"⚠️ Error consultando episodios "
-                f"(intento {intento}/{max_intentos}): {e}"
-            )
-
-            if intento < max_intentos:
-                print("🔄 Reintentando...")
-            else:
-                print(
-                    "❌ No se pudo acceder a la página."
-                )
-                return None
-
-    # --------------------------------------------------
-    # Procesar HTML
-    # --------------------------------------------------
 
     try:
-        
-        driver.get(url_anime)
 
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "ul.episodes-list li")
-            )
-        )
+        # --------------------------------------------------
+        # 1. Registrar archivos existentes ANTES
+        # --------------------------------------------------
 
-        html = driver.page_source
-
-        soup = BeautifulSoup(
-            html,
-            "html.parser"
-        )
-
-        bloque = soup.find(
-            "ul",
-            class_="episodes-list"
-        )
-
-        if bloque:
-            print("✅ Se encontró <ul class='episodes-list'>")
-
-            print("\nHTML encontrado:")
-            print(
-                bloque.prettify()[:5000]
-            )
-
-            enlaces = bloque.find_all("a")
-
-            print(
-                f"\n🔗 Enlaces encontrados dentro de la lista: "
-                f"{len(enlaces)}"
-            )
-
-            for enlace in enlaces[:5]:
-                print(
-                    "HREF:",
-                    enlace.get("href")
-                )
-
-                print(
-                    "CLASE:",
-                    enlace.get("class")
-                )
-
-                print(
-                    "TEXTO:",
-                    enlace.get_text(" ", strip=True)
-                )
-
-        else:
-            print(
-                "❌ BeautifulSoup no encontró "
-                "<ul class='episodes-list'>"
-            )
-
-        episodios = []
-
-        # Los episodios están dentro de:
-        # <a class="fa-play-circle ...">
+        archivos_antes = set(os.listdir(download_dir))
 
         print(
-            "Cantidad de elementos encontrados:",
-            len(soup.select("ul.episodes-list a.fa-play-circle"))
+            f"\n🌐 Abriendo enlace de descarga para: "
+            f"{nombre_video}"
         )
 
-        lista = soup.find(
-            "ul",
-            class_="episodes-list"
-        )
+        driver.get(enlace_descarga)
 
-        if lista:
-
-            elementos = lista.find_all(
-                "a"
-            )
-
-            print(
-                f"🔎 Encontrados: {len(elementos)}"
-            )
-
-            for elemento in elementos:
-
-                print(
-                    elemento.get("href"),
-                    elemento.get_text(
-                        " ",
-                        strip=True
-                    )
-                )
-        print(
-            f"🔎 Episodios encontrados en HTML: "
-            f"{len(elementos)}"
-        )
-
-        for elemento in elementos:
-
-            elemento_episodio = elemento.select_one(
-                "p span"
-            )
-
-            if not elemento_episodio:
-                continue
-
-            texto_episodio = elemento_episodio.get_text(
-                " ",
-                strip=True
-            )
-
-            match = re.search(
-                r"Episodio\s+(\d+)",
-                texto_episodio,
-                re.IGNORECASE
-            )
-
-            if not match:
-                continue
-
-            numero = int(match.group(1))
-
-            href = elemento.get("href")
-
-            if not href:
-                continue
-
-            enlace = urljoin(
-                url_anime,
-                href
-            )
-
-            episodios.append({
-                "episodio": numero,
-                "url": enlace
-            })
-
-            print(
-                f"🎬 Episodio {numero}: {enlace}"
-            )
+        time.sleep(3)
 
         # --------------------------------------------------
-        # Comprobar resultados
+        # 2. Detectar servidor
         # --------------------------------------------------
 
-        if not episodios:
-
-            print(
-                "❌ No se encontraron episodios."
-            )
-
-            return None
-
-        # --------------------------------------------------
-        # Obtener el mayor episodio
-        # --------------------------------------------------
-
-        ultimo = max(
-            episodios,
-            key=lambda x: x["episodio"]
+        servidor = detectar_servidor_descarga(
+            driver
         )
 
         print(
-            f"✅ Último episodio encontrado: "
-            f"{ultimo['episodio']}"
+            f"🌐 Servidor detectado: {servidor}"
         )
+
+        # --------------------------------------------------
+        # 3. Validación específica para MEGA (Errores comunes)
+        # --------------------------------------------------
+
+        if servidor == "mega":
+            print("🔍 Verificando estado del archivo en Mega...")
+            try:
+            # Damos un par de segundos por si Mega tarda en renderizar el aviso en pantalla
+                time.sleep(2)
+                
+                texto_pagina = driver.page_source.lower()
+                
+             # Verificamos si aparece el mensaje exacto o variaciones comunes
+                if "el archivo ya no está disponible" in texto_pagina or "file no longer available" in texto_pagina:
+                    print(f"❌ Error en Mega: El archivo ya no está disponible.")
+                    return False
+                
+                if "archivo no encontrado" in texto_pagina or "file not found" in texto_pagina:
+                    print(f"❌ Error en Mega: El archivo no fue encontrado o fue eliminado.")
+                    return False
+                
+                if "cuota de transferencia agotada" in texto_pagina or "bandwidth quota exceeded" in texto_pagina or "quota exceeded" in texto_pagina:
+                    print(f"⚠️ Error en Mega: Se ha agotado la cuota de transferencia.")
+                    return False
+                    
+            except Exception as e:
+                print(f"⚠️ No se pudo verificar el estado de Mega: {e}")
+
+        # --------------------------------------------------
+        # 4. Buscar botón correspondiente
+        # --------------------------------------------------
+
+        boton_descarga = encontrar_boton_descarga(
+            driver,
+            servidor
+        )
+
+        if boton_descarga is None:
+
+            print(
+                f"❌ No se encontró botón "
+                f"de descarga para {nombre_video}"
+            )
+
+            return False
+
+        # -----------------------------------------
+        # Hacer clic
+        # -----------------------------------------
+
+        boton_descarga.click()
 
         print(
-            f"🔗 URL: {ultimo['url']}"
+            f"⬇️ Descarga iniciada: {nombre_video}"
         )
 
-        return ultimo
+        # --------------------------------------------------
+        # 5. Esperar confirmación REAL
+        # --------------------------------------------------
+
+        archivo_descargado = verificar_descarga(
+            download_dir=download_dir,
+            archivos_antes=archivos_antes,
+            tiempo_maximo=900,
+            intervalo=2,
+            tiempo_estable=6
+        )
+
+        # --------------------------------------------------
+        # 6. Resultado
+        # --------------------------------------------------
+
+        if archivo_descargado:
+
+            print(
+                f"✅ DESCARGA COMPLETADA: "
+                f"{nombre_video}"
+            )
+
+            print(
+                f"📁 Archivo: "
+                f"{os.path.basename(archivo_descargado)}"
+            )
+
+            return True
+
+        print(
+            f"❌ La descarga NO pudo confirmarse: "
+            f"{nombre_video}"
+        )
+
+        return False
 
     except Exception as e:
 
         print(
-            f"❌ Error procesando episodios: {e}"
+            f"❌ Error descargando "
+            f"{nombre_video}: {e}"
         )
 
-        return None
-
-
+        return False
+ 
 if __name__ == "__main__":
-    
-    
+# 1. Convertirlo en una LISTA de diccionarios (usando corchetes [])
     animes = [
         {
-            "nombre": "Yomi no Tsugai",
-            "episodio_actual": 18,
-            "episodios_totales": 24,
-            "pendientes": 1,
-            "episodio_buscado": 19
+            "nombre": "Tenmaku no Jaadugar Episodio 8",
+            "link_descarga": "https://mega.nz/#!cXFwzSJC!JkMylO_o0BJKIgEapPUCx5j1eBddAVJuWtQWiB4feuo"
         },
+        {
+            "nombre": "Tenmaku no Jaadugar Episodio 9",
+            "link_descarga": "https://mega.nz/#!sTkkiRzD!IfMXgbeOIIiBEG1DR7xOuaamBqBrrLo_XKl1JDlIQQ4"
+        }
     ]
-    
-    anime = animes[0]
-    
-    nombre_url = convertir_nombre_url(
-        anime["nombre"]
-    )
 
-    url_busqueda = URL_TIOANIME + nombre_url
+    # 2. Configuramos el navegador una sola vez fuera del bucle
+    driver = configurar_navegador(DOWNLOAD_DIR_2)
 
-
-    
-    obtener_ultimo_episodio(url_busqueda)
+    try:
+        # 3. Recorremos cada anime de la lista con un bucle for
+        for anime in animes:
+            print(f"\n🚀 Procesando prueba para: {anime['nombre']}")
+            
+            hacer_click_en_boton_descarga(
+                driver,
+                anime["link_descarga"], 
+                DOWNLOAD_DIR_2, 
+                anime["nombre"]
+            )
+            
+     # Opcional: una breve pausa entre descargas de prueba
+        time.sleep(3)
+            
+    finally:
+        # Cerramos el navegador al terminar las pruebas
+        driver.quit()
+        print("\n🔒 Navegador cerrado.")

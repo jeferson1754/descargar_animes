@@ -114,11 +114,13 @@ def buscar_en_fuentes(animes, fuentes):
 
     resultados = []
 
-    driver_capitulos = configurar_navegador(
-        DOWNLOAD_DIR
-    )
+
 
     for anime in animes:
+        
+        driver_capitulos = configurar_navegador(
+        DOWNLOAD_DIR
+        )
 
         nombre = anime.get("nombre")
         episodio_buscado = anime.get("episodio_buscado")
@@ -186,6 +188,8 @@ def buscar_en_fuentes(animes, fuentes):
                     f"⚠️ Error en "
                     f"{nombre_fuente}: {type(e).__name__}: {e}"
                 )
+        
+        driver_capitulos.quit()        
 
         if not encontrado:
 
@@ -195,5 +199,5 @@ def buscar_en_fuentes(animes, fuentes):
                 f"episodio {episodio_buscado}"
             )
 
-    driver_capitulos.quit()
+
     return resultados
