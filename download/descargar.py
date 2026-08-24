@@ -459,7 +459,9 @@ def hacer_click_en_boton_descarga(
                     print(f"❌ Error en Mega: El archivo no fue encontrado o fue eliminado.")
                     return False
                 
-                if "cuota de transferencia agotada" in texto_pagina or "bandwidth quota exceeded" in texto_pagina or "quota exceeded" in texto_pagina:
+                #if "cuota de transferencia agotada" in texto_pagina or "bandwidth quota exceeded" in texto_pagina or "quota exceeded" in texto_pagina:
+                if "bandwidth quota exceeded" in texto_pagina or "quota exceeded" in texto_pagina:
+                                
                     print(f"⚠️ Error en Mega: Se ha agotado la cuota de transferencia.")
                     return False
                     
