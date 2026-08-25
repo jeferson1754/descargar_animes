@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 import difflib
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 
 from utilidades.archivos import normalizar_nombre
@@ -253,13 +254,8 @@ def buscar_videos_tioanime(driver, url, animes):
         # 2. Buscar página específica del anime
         # --------------------------------------------------
         
-        nombre_url = convertir_nombre_url(
+        url_anime = buscar_y_obtener_url_anime(driver,
                 nombre
-        )
-
-        url_anime = (
-            URL_TIOANIME
-            + nombre_url
         )
 
         ultimo = obtener_ultimo_episodio(
@@ -570,39 +566,65 @@ def buscar_boton_descarga(driver, video_url):
         return None
 
 
-def convertir_nombre_url(nombre):
-    """
-    Convierte un nombre de anime a formato slug para URL.
+def buscar_y_obtener_url_anime(driver, nombre_anime):
+    try:
+        print(f"🔍 Buscando en la web de TioAnime: {nombre_anime}")
+        driver.get("https://tioanime.com/")
 
-    Ejemplo:
-        'Sayonara Lara' -> 'sayonara-lara'
-    """
+        wait = WebDriverWait(driver, 10)
 
-    # Minúsculas
-    nombre = nombre.lower()
+        # 1. Esperar a que el input de búsqueda esté presente
+        input_buscador = wait.until(
+            EC.presence_of_element_located((By.ID, "search-anime"))
+        )
 
-    # Eliminar tildes
-    nombre = unicodedata.normalize(
-        "NFKD",
-        nombre
-    ).encode(
-        "ascii",
-        "ignore"
-    ).decode(
-        "ascii"
-    )
+        # 2. 🔑 CLAVE: Usar JavaScript para escribir el texto de golpe
+        # (evita que el headless ignore o trunque las teclas tipeadas rápido)
+        driver.execute_script(
+            "arguments[0].value = arguments[1];", input_buscador, nombre_anime)
 
-    # Reemplazar todo lo que no sea letra o número por "-"
-    nombre = re.sub(
-        r"[^a-z0-9]+",
-        "-",
-        nombre
-    )
+        # 3. Forzar el evento de cambio de input mediante JS para que el buscador despierte
+        driver.execute_script(
+            "arguments[0].dispatchEvent(new Event('input', { bubbles: true }));", input_buscador)
+        driver.execute_script(
+            "arguments[0].dispatchEvent(new Event('change', { bubbles: true }));", input_buscador)
 
-    # Eliminar "-" del principio y final
-    nombre = nombre.strip("-")
+        # Dar un respiro para que carguen los resultados flotantes
+        time.sleep(2)
 
-    return nombre
+        try:
+            # 4. Intentar capturar el primer resultado del desplegable dinámico
+            print("⏳ Buscando en el menú desplegable...")
+            primer_resultado = wait.until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "div#search-results a.anime, div#search-results a"))
+            )
+            href_relativo = primer_resultado.get_attribute("href")
+
+            if href_relativo and "javascript" not in href_relativo and "#" not in href_relativo:
+                print(f"✅ ¡Encontrado en el desplegable! URL: {href_relativo}")
+                return href_relativo
+        except:
+            print(
+                "⚠️ El menú desplegable no respondió. Enviando tecla ENTER por seguridad...")
+
+        # 5. Respaldo por ENTER si el desplegable falla
+        input_buscador.send_keys(Keys.ENTER)
+        time.sleep(3)
+
+        primer_resultado_directorio = wait.until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "article.anime a, .anime-grid a"))
+        )
+        href_relativo = primer_resultado_directorio.get_attribute("href")
+
+        print(f"✅ ¡Encontrado por redirección! URL: {href_relativo}")
+        return href_relativo
+
+    except Exception as e:
+        print(
+            f"❌ No se pudo encontrar el anime '{nombre_anime}' de ninguna forma: {e}")
+        return None
 
 
 def buscar_episodio(driver, url_anime, numero_episodio_buscado, max_intentos=3):
