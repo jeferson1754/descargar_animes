@@ -9,7 +9,7 @@ from utilidades.archivos import leer_nombres_desde_txt, guardar_resultados_video
 from utilidades.navegador import configurar_navegador
 from animes.buscador import buscar_en_fuentes
 from config import FUENTES_ANIME,SERVIDOR
-from base_excel import obtener_conexion_google_sheets, guardar_resultados_en_sheets
+from base_excel import obtener_conexion_google_sheets, guardar_y_actualizar_historial_sheets, leer_animes_pendientes
 
 
 
@@ -460,7 +460,7 @@ def hacer_click_en_boton_descarga(
                     print(f"❌ Error en Mega: El archivo no fue encontrado o fue eliminado.")
                     return False
                 
-                if "cuota de transferencia agotada" in texto_pagina or "bandwidth quota exceeded" in texto_pagina or "quota exceeded" in texto_pagina:
+                if texto_pagina or "bandwidth quota exceeded" in texto_pagina or "quota exceeded" in texto_pagina:
                     print(f"⚠️ Error en Mega: Se ha agotado la cuota de transferencia.")
                     return False
                     
@@ -635,36 +635,28 @@ def validar_enlace_mega(driver, enlace):
     y con cuota de transferencia activa.
     Devuelve True si es válido, False si está caído.
     """
-    if not enlace or "mega" not in enlace.lower():
-        # Si no es de Mega o está vacío, asumimos válido para que otra fuente/lógica lo maneje
-        return True 
+    if not enlace or "mega.nz" not in enlace.lower():
+        return True # Si no es de Mega, lo damos por bueno por defecto
 
     try:
-        print(f"🔍 Validando estado del enlace en Mega...")
         driver.get(enlace)
-        time.sleep(3) # Espera a que renderice
-        
+        time.sleep(3)
         texto_pagina = driver.page_source.lower()
         
-        # Comprobación de errores de Mega
-        if "el archivo ya no está disponible" in texto_pagina or "file no longer available" in texto_pagina:
-            print(f"❌ Enlace inválido: El archivo ya no está disponible en Mega.")
+        # Si encuentra errores típicos de Mega, retorna False
+        if any(error in texto_pagina for error in [
+            "el archivo ya no está disponible", 
+            "file no longer available", 
+            "archivo no encontrado", 
+            "file not found", 
+            "bandwidth quota exceeded"
+        ]):
             return False
             
-        if "archivo no encontrado" in texto_pagina or "file not found" in texto_pagina:
-            print(f"❌ Enlace inválido: Archivo no encontrado en Mega.")
-            return False
-            
-        if "cuota de transferencia agotada" in texto_pagina or "bandwidth quota exceeded" in texto_pagina or "quota exceeded" in texto_pagina:
-            print(f"⚠️ Enlace inválido: Cuota de transferencia agotada en Mega.")
-            return False
-            
-        print(f"✅ Enlace de Mega válido y activo.")
-        return True
+        return True # Todo OK
 
-    except Exception as e:
-        print(f"⚠️ Error validando enlace en Mega: {e}")
-        return False
+    except Exception:
+        return False # Si hubo un error de red o carga, consideramos que falló
     
 def flujo_descarga_animes(file_name, download_dir):
     
@@ -674,32 +666,57 @@ def flujo_descarga_animes(file_name, download_dir):
     if not datos_crudos:
         print("❌ No hay animes pendientes para buscar.")
         return False
-
-    # Expandir los animes según sus episodios pendientes
-    animes_a_buscar = []
+# 2. Expandir los animes según sus episodios pendientes PRIMERO
+    animes_a_expandir = []
     
     for item in datos_crudos:
         nombre = item.get("nombre")
         episodio_actual = item.get("episodio_actual", 0)
         pendientes = item.get("pendientes", 0)
         
-        # Si hay pendientes, creamos una tarea individual por cada episodio faltante
         if pendientes > 0:
             for i in range(1, pendientes + 1):
                 ep_buscado = episodio_actual + i
-                animes_a_buscar.append({
+                animes_a_expandir.append({
                     "nombre": nombre,
                     "episodio_buscado": ep_buscado
                 })
         else:
-            # Por si acaso viene un formato con episodio ya definido
-            animes_a_buscar.append(item)
+            animes_a_expandir.append(item)
 
-    if not animes_a_buscar:
+    if not animes_a_expandir:
         print("❌ No hay episodios pendientes para procesar.")
         return False
     
-        # Paso 1: Buscar videos relacionados con cada episodio pendiente
+    # ==================================================================
+    # ☁️ FILTRO INTELIGENTE DE GOOGLE SHEETS (Nombre + Episodio)
+    # ==================================================================
+    print("☁️ Conectando con Google Sheets para verificar el historial previo...")
+    sheet_service = obtener_conexion_google_sheets()
+    animes_en_sheet = leer_animes_pendientes(sheet_service) if sheet_service else []
+
+    animes_a_buscar = []
+    for anime_obj in animes_a_expandir:
+        nombre_obj = anime_obj.get("nombre", "").lower()
+        ep_obj = str(anime_obj.get("episodio_buscado", ""))
+
+        # Verificamos si ESTE EXACTO anime Y episodio ya están en la hoja
+        ya_registrado = any(
+            a["nombre"].lower() == nombre_obj and str(a["episodio"]) == ep_obj
+            for a in animes_en_sheet
+        )
+        
+        if ya_registrado:
+            print(f"⏩ Omitiendo '{anime_obj.get('nombre')}' (Ep. {ep_obj}): ya se encuentra registrado en Google Sheets.")
+        else:
+            animes_a_buscar.append(anime_obj)
+
+    if not animes_a_buscar:
+        print("❌ No hay episodios nuevos para buscar después de revisar Google Sheets.")
+        return False
+    # ==================================================================
+
+    # Paso 1: Buscar videos relacionados únicamente con los que pasaron el filtro
     print("Buscando videos relacionados...")
     videos_encontrados = buscar_en_fuentes(
         animes_a_buscar,
@@ -710,9 +727,9 @@ def flujo_descarga_animes(file_name, download_dir):
         print("No se encontraron videos para los animes indicados.")
         return False
 
-    videos_finales = proceso_nube_buscar_y_guardar_sheets (download_dir,videos_encontrados)
+    videos_finales = proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados)
     
-    proceso_local_descargar_archivos (download_dir, videos_finales)
+    #proceso_local_descargar_archivos (download_dir, videos_finales)
     
 def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
     """
@@ -726,18 +743,35 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
         return False
 
     try:
-        videos_finales = buscar_enlace_descarga_y_actualizar(
+        # Obtenemos la lista inicial de videos encontrados
+        videos_brutos = buscar_enlace_descarga_y_actualizar(
             driver,
             videos_encontrados
         )
 
+        if not videos_brutos:
+            print("❌ No se obtuvieron enlaces de descarga para validar.")
+            return False
+
         # 🛡️ Validación de estado en Mega para cada video encontrado
         print("\n🔎 Validando estado de los enlaces en Mega...")
-        for video in videos_finales:
-            enlace_mega = video.get("link_descarga")
-            estado_enlace = validar_enlace_mega(driver, enlace_mega)
-            video["estado"] = estado_enlace
-            print(f"📌 {video.get('nombre')} -> Estado: {estado_enlace}")
+        videos_finales = []  # <--- Creamos una lista nueva vacía para los resultados limpios
+        
+        for video in videos_brutos:            
+            enlace_mega = video.get("link_descarga") or video.get("enlace")
+            
+            # 1. Evaluamos la validación
+            es_valido = validar_enlace_mega(driver, enlace_mega)
+            
+            if es_valido:
+                # Si es True: Lo marcamos como Pendiente y lo guardamos en la lista temporal
+                print(f"✅ Enlace válido para: {video.get('nombre')}")
+                video["estado"] = "Pendiente"
+                videos_finales.append(video)
+            else:
+                # Si es False: El enlace falló
+                print(f"❌ Enlace caído o con cuota en Mega para {video.get('nombre')}. Buscando en otra fuente...")
+                # (Aquí puedes agregar lógica para buscar en otra fuente si lo deseas)
 
     finally:
         try:
@@ -747,7 +781,7 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
             print(f"⚠️ No se pudo cerrar el driver: {e}")
 
     if not videos_finales:
-        print("❌ No se encontraron videos finales para guardar.")
+        print("❌ No se encontraron videos finales válidos para guardar.")
         return False
 
     # ☁️ Sincronización con Google Sheets
@@ -755,7 +789,7 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
     sheet_service = obtener_conexion_google_sheets()
     
     if sheet_service:
-        guardar_resultados_en_sheets(sheet_service, videos_finales)
+        guardar_y_actualizar_historial_sheets(sheet_service, videos_finales)
     else:
         print("⚠️ No se pudo guardar en Google Sheets, respaldo local disponible.")
 
@@ -764,7 +798,6 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
     print("🎉 Proceso en la nube finalizado con éxito.")
     
     return videos_finales
-
 
 # ==========================================
 # MÓDULO 2: DESCARGA LOCAL Y ACTUALIZACIÓN

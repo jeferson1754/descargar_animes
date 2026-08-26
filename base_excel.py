@@ -20,15 +20,19 @@ SPREADSHEET_ID = "1Z35OcOCf9tTHh9MVWvpAGnJrv8o7JShvwbokpLBFi7Y"
 # Lista global para acumular los logs si deseas volcar logs a Sheets
 logs_acumulados_sheets = []
 
+
 class SheetsLogHandler(logging.Handler):
     """Handler personalizado para capturar logs y prepararlos para Google Sheets."""
+
     def emit(self, record):
         try:
             log_formateado = self.format(record)
-            tiempo_str = datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S")
+            tiempo_str = datetime.fromtimestamp(
+                record.created).strftime("%Y-%m-%d %H:%M:%S")
             logs_acumulados_sheets.append([tiempo_str, log_formateado])
         except Exception:
             self.handleError(record)
+
 
 def configurar_logging():
     logger = logging.getLogger()
@@ -43,8 +47,10 @@ def configurar_logging():
     console_handler.setFormatter(formato_consola)
 
     # 2. Archivo Local (Historial de texto plano)
-    file_handler = logging.FileHandler('historial_ejecuciones.log', encoding='utf-8')
-    file_handler.setFormatter(logging.Formatter('%(asctime)s │ %(levelname)-8s │ %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+    file_handler = logging.FileHandler(
+        'historial_ejecuciones.log', encoding='utf-8')
+    file_handler.setFormatter(logging.Formatter(
+        '%(asctime)s │ %(levelname)-8s │ %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 
     # 3. Handler de Google Sheets
     sheets_handler = SheetsLogHandler()
@@ -54,7 +60,9 @@ def configurar_logging():
     logger.addHandler(file_handler)
     logger.addHandler(sheets_handler)
 
-    logging.getLogger('googleapiclient.discovery_cache').setLevel(logging.ERROR)
+    logging.getLogger(
+        'googleapiclient.discovery_cache').setLevel(logging.ERROR)
+
 
 # Inicializar logging
 configurar_logging()
@@ -66,19 +74,20 @@ def obtener_conexion_google_sheets():
     Compatible tanto para entorno local (token.pickle) como para GitHub Actions.
     """
     creds = None
-    
+
     # 1. Intentar cargar desde token.pickle (Uso local habitual)
     if os.path.exists("token.pickle"):
         with open("token.pickle", "rb") as f:
             creds = pickle.load(f)
-            
+
     # 2. Si no hay token válido o expiró, intentamos refrescarlo o usar variables de entorno (para la nube)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             try:
                 creds.refresh(Request())
             except Exception as e:
-                logging.warning(f"⚠️ No se pudo refrescar el token automáticamente: {e}")
+                logging.warning(
+                    f"⚠️ No se pudo refrescar el token automáticamente: {e}")
                 creds = None
 
         if not creds:
@@ -88,12 +97,15 @@ def obtener_conexion_google_sheets():
                 try:
                     creds_bytes = base64.b64decode(token_base64)
                     creds = pickle.loads(creds_bytes)
-                    logging.info("🔐 Credenciales cargadas exitosamente desde variable de entorno (Base64).")
+                    logging.info(
+                        "🔐 Credenciales cargadas exitosamente desde variable de entorno (Base64).")
                 except Exception as e:
-                    logging.error(f"❌ Error al decodificar el token de GitHub Secrets: {e}")
-            
+                    logging.error(
+                        f"❌ Error al decodificar el token de GitHub Secrets: {e}")
+
     if not creds or not creds.valid:
-        logging.error("❌ Error: No se encontró un token de Google Sheets válido. Ejecuta la autorización inicial en local.")
+        logging.error(
+            "❌ Error: No se encontró un token de Google Sheets válido. Ejecuta la autorización inicial en local.")
         return None
 
     try:
@@ -104,48 +116,134 @@ def obtener_conexion_google_sheets():
         logging.error(f"❌ Error al conectar con la API de Google Sheets: {e}")
         return None
 
-
-def guardar_resultados_en_sheets(sheet_service, resultados_animes):
+def leer_animes_pendientes(sheet_service):
     """
-    Recibe la lista de animes encontrados con sus enlaces de descarga
-    y los escribe directamente en tu Google Sheet.
+    Lee dinámicamente los datos existentes en Google Sheets y devuelve 
+    una lista con los animes ya registrados para evitar duplicados o búsquedas innecesarias.
     """
     if not sheet_service:
-        logging.error("❌ No hay servicio de Sheets disponible para guardar los datos.")
+        print("❌ No hay conexión activa con Google Sheets.")
+        return []
+
+    try:        
+        rango_lectura = "Animes!A:D"
+        
+        # Solicitamos los datos a Google Sheets
+        result = sheet_service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=rango_lectura
+        ).execute()
+        
+        filas_totales_hoja = result.get("values", [])
+
+        if not filas_totales_hoja:
+            print("ℹ️ La hoja de cálculo está vacía.")
+            return []
+
+        # Omitimos la cabecera (fila 1)
+        datos_existentes = filas_totales_hoja[1:]
+        
+        animes_registrados = []
+        for fila in datos_existentes:
+            # Aseguramos que la fila tenga al menos nombre y episodio
+            if len(fila) >= 2:
+                nombre = fila[0]
+                episodio = fila[1]
+                estado = fila[3] if len(fila) > 3 else "Pendiente"
+                
+                animes_registrados.append({
+                    "nombre": nombre,
+                    "episodio": episodio,
+                    "estado": estado
+                })
+
+        print(f"📖 Se leyeron {len(animes_registrados)} registros previos desde Google Sheets.")
+        return animes_registrados
+
+    except Exception as e:
+        print(f"❌ Error al leer los animes desde Google Sheets: {e}")
+        return []
+    
+def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
+    """
+    Lee dinámicamente los datos existentes, coloca lo nuevo arriba, 
+    marca lo viejo como 'Completado' y actualiza la hoja sin rangos fijos.
+    """
+    if not sheet_service:
+        print("❌ No hay conexión activa con Google Sheets.")
         return False
 
-    try:
-        # Rango donde se insertarán los datos (ej. pestaña 'Pendientes!A:D')
-        # Ajusta el nombre de la hoja según tu estructura en Google Sheets
-        nombre_hoja = "Animes!A2" 
-        
-        filas_a_insertar = []
-        for anime in resultados_animes:
-            nombre = anime.get("nombre", "")
-            nombre_anime = anime.get("nombre_anime", "")
-            episodio = anime.get("episodio", "")
-            link_descarga = anime.get("link_descarga", "")
-            
-            # Formato de la fila para tu Google Sheet
-            filas_a_insertar.append([nombre_anime, episodio, link_descarga, "Pendiente"])
+    try:        
+        # 1. Rango dinámico: Solicitamos toda la columna A:D con datos
+        rango_lectura = "Animes!A:D"
 
+        result = sheet_service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=rango_lectura
+        ).execute()
+        
+        filas_totales_hoja = result.get("values", [])
+
+        filas_antiguas = []
+        if filas_totales_hoja:
+            # Separamos la cabecera (fila 1) del resto del contenido (filas 2 en adelante)
+            datos_existentes = filas_totales_hoja[1:]
+
+            # 2. Transformamos las filas antiguas: las marcamos como "Completado"
+            for fila in datos_existentes:
+                # Aseguramos que la fila tenga las 4 columnas cubiertas
+                while len(fila) < 4:
+                    fila.append("Pendiente")
+                
+                # Si estaba pendiente, lo pasamos a completado
+                if fila[3].lower() == "pendiente":
+                    fila[3] = "Completado"
+                
+                filas_antiguas.append(fila)
+
+        # 3. Preparamos los nuevos resultados con su estado correspondiente
+        filas_nuevas = []
+        for anime in resultados_animes:
+            nombre_anime = anime.get("nombre_anime") or anime.get("nombre", "")
+            episodio = anime.get("episodio", "") or anime.get("episodio_buscado", "")
+            link_descarga = anime.get("link_descarga", "")
+            estado = anime.get("estado", "Pendiente")
+            
+            filas_nuevas.append([nombre_anime, str(episodio), link_descarga, estado])
+
+        if not filas_nuevas:
+            print("ℹ️ No hay registros nuevos para actualizar en Google Sheets.")
+            return False
+
+        # 4. Combinamos: Lo nuevo arriba, lo viejo abajo
+        nuevos_datos_combinados = filas_nuevas + filas_antiguas
+        
+        # Agregamos de nuevo la cabecera al principio de todo el bloque
+        filas_finales = [["Anime", "Episodio", "Enlace", "Estado"]] + nuevos_datos_combinados
+
+        # 5. Limpiamos toda la hoja de forma limpia (sin importar cuántas filas tenía)
+        sheet_service.spreadsheets().values().clear(
+            spreadsheetId=SPREADSHEET_ID,
+            range="Animes!A:D",
+            body={}
+        ).execute()
+
+        # 6. Escribimos todo el bloque optimizado desde la celda A1
         body = {
-            "values": filas_a_insertar
+            "values": filas_finales
         }
 
-        # Ejecutamos la petición para añadir filas al final o sobrescribir
-        result = sheet_service.spreadsheets().values().append(
+        sheet_service.spreadsheets().values().update(
             spreadsheetId=SPREADSHEET_ID,
-            range=nombre_hoja,
+            range="Animes!A1",
             valueInputOption="USER_ENTERED",
             body=body
         ).execute()
 
-        logging.info(f"✅ Se han guardado {len(filas_a_insertar)} registros en Google Sheets correctamente.")
+        print(f"✅ Google Sheets sincronizado dinámicamente: {len(filas_nuevas)} registros nuevos arriba.")
         return True
 
     except Exception as e:
-        logging.error(f"❌ Error al escribir en Google Sheets: {e}")
-        return False
-    
+        print(f"❌ Error al actualizar el historial en Google Sheets: {e}")
+        return False  
  
