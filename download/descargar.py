@@ -8,9 +8,8 @@ import os
 from utilidades.archivos import leer_nombres_desde_txt, guardar_resultados_videos_txt
 from utilidades.navegador import configurar_navegador
 from animes.buscador import buscar_en_fuentes
-from config import FUENTES_ANIME,SERVIDOR
-from base_excel import obtener_conexion_google_sheets, guardar_y_actualizar_historial_sheets, leer_animes_pendientes
-
+from config import FUENTES_ANIME, SERVIDOR
+from base_excel import obtener_conexion_google_sheets, guardar_y_actualizar_historial_sheets, leer_animes_pendientes, actualizar_estado_google_sheets
 
 
 def verificar_descarga(
@@ -178,6 +177,7 @@ def verificar_descarga(
 
     return None
 
+
 def marcar_anime_descargado_con_selenium(driver, nombre_anime, episodio):
     """
     Navega a la URL del servidor web con Selenium para marcar el anime como descargado.
@@ -185,20 +185,23 @@ def marcar_anime_descargado_con_selenium(driver, nombre_anime, episodio):
     try:
         # Construye la URL de actualización con los parámetros necesarios (ajusta según tu PHP)
         url_servidor = f"{SERVIDOR}/Anime/Emision/actualizar.php?nombre_anime={nombre_anime}&episodio={episodio}"
-        print(f"🌐 Actualizando servidor mediante Selenium: {nombre_anime} - Ep {episodio} / {url_servidor}")
-        
+        print(
+            f"🌐 Actualizando servidor mediante Selenium: {nombre_anime} - Ep {episodio} / {url_servidor}")
+
         # El navegador entra a la página de actualización
         driver.get(url_servidor)
-        
+
         # Opcional: Pequeña pausa para asegurar que el servidor procese la petición en la base de datos
         time.sleep(2)
-        
+
         print(f"✅ Servidor actualizado exitosamente.")
-        return True
         
+        return True
+
     except Exception as e:
         print(f"⚠️ Error al actualizar el servidor con Selenium: {e}")
         return False
+
 
 def buscar_enlace_descarga_y_actualizar(driver, videos_encontrados):
     """Busca el enlace de descarga (Mega) para cada video y lo agrega a la lista."""
@@ -219,14 +222,15 @@ def buscar_enlace_descarga_y_actualizar(driver, videos_encontrados):
 
     return videos_con_descarga
 
+
 def buscar_boton_descarga(driver, video_url):
-    
+
     if driver is None:
         print(
             "❌ No hay driver disponible."
         )
         return None
-    
+
     try:
         driver.get(video_url)
         time.sleep(5)  # Espera para que la página cargue
@@ -244,7 +248,8 @@ def buscar_boton_descarga(driver, video_url):
     except Exception as e:
         print(f"Error al acceder a {video_url}: {e}")
         return None
-    
+
+
 def detectar_servidor_descarga(driver):
     """
     Detecta el servidor según la URL actual y/o elementos presentes
@@ -315,6 +320,7 @@ def detectar_servidor_descarga(driver):
         )
 
     return "desconocido"
+
 
 def encontrar_boton_descarga(driver, servidor):
     """
@@ -395,6 +401,7 @@ def encontrar_boton_descarga(driver, servidor):
 
     return None
 
+
 def hacer_click_en_boton_descarga(
     driver,
     enlace_descarga,
@@ -448,22 +455,25 @@ def hacer_click_en_boton_descarga(
             try:
                 # Damos un par de segundos por si Mega tarda en renderizar el aviso en pantalla
                 time.sleep(2)
-                
+
                 texto_pagina = driver.page_source.lower()
-                
+
                 # Verificamos si aparece el mensaje exacto o variaciones comunes
                 if "el archivo ya no está disponible" in texto_pagina or "file no longer available" in texto_pagina:
                     print(f"❌ Error en Mega: El archivo ya no está disponible.")
                     return False
-                
+
                 if "archivo no encontrado" in texto_pagina or "file not found" in texto_pagina:
-                    print(f"❌ Error en Mega: El archivo no fue encontrado o fue eliminado.")
+                    print(
+                        f"❌ Error en Mega: El archivo no fue encontrado o fue eliminado.")
                     return False
-                
+
+                '''
                 if texto_pagina or "bandwidth quota exceeded" in texto_pagina or "quota exceeded" in texto_pagina:
                     print(f"⚠️ Error en Mega: Se ha agotado la cuota de transferencia.")
                     return False
-                    
+                '''
+
             except Exception as e:
                 print(f"⚠️ No se pudo verificar el estado de Mega: {e}")
 
@@ -540,7 +550,8 @@ def hacer_click_en_boton_descarga(
         )
 
         return False
-    
+
+
 def descargar_video_con_reintentos(
     video,
     download_dir,
@@ -624,10 +635,11 @@ def descargar_video_con_reintentos(
             time.sleep(espera)
 
     return False
-    
+
 # ==========================================
 # MÓDULO 1: BÚSQUEDA, VALIDACIÓN Y SHEETS (NUBE)
 # ==========================================
+
 
 def validar_enlace_mega(driver, enlace):
     """
@@ -636,44 +648,45 @@ def validar_enlace_mega(driver, enlace):
     Devuelve True si es válido, False si está caído.
     """
     if not enlace or "mega.nz" not in enlace.lower():
-        return True # Si no es de Mega, lo damos por bueno por defecto
+        return True  # Si no es de Mega, lo damos por bueno por defecto
 
     try:
         driver.get(enlace)
-        time.sleep(3)
+        time.sleep(5)
         texto_pagina = driver.page_source.lower()
-        
+
         # Si encuentra errores típicos de Mega, retorna False
         if any(error in texto_pagina for error in [
-            "el archivo ya no está disponible", 
-            "file no longer available", 
-            "archivo no encontrado", 
-            "file not found", 
+            "el archivo ya no está disponible",
+            "file no longer available",
+            "archivo no encontrado",
+            "file not found",
             "bandwidth quota exceeded"
         ]):
             return False
-            
-        return True # Todo OK
+
+        return True  # Todo OK
 
     except Exception:
-        return False # Si hubo un error de red o carga, consideramos que falló
-    
+        return False  # Si hubo un error de red o carga, consideramos que falló
+
+
 def flujo_descarga_animes(file_name, download_dir):
-    
-     # Leer los datos desde el archivo .json / .txt
+
+    # Leer los datos desde el archivo .json / .txt
     datos_crudos = leer_nombres_desde_txt(file_name)
-    
+
     if not datos_crudos:
         print("❌ No hay animes pendientes para buscar.")
         return False
 # 2. Expandir los animes según sus episodios pendientes PRIMERO
     animes_a_expandir = []
-    
+
     for item in datos_crudos:
         nombre = item.get("nombre")
         episodio_actual = item.get("episodio_actual", 0)
         pendientes = item.get("pendientes", 0)
-        
+
         if pendientes > 0:
             for i in range(1, pendientes + 1):
                 ep_buscado = episodio_actual + i
@@ -687,13 +700,16 @@ def flujo_descarga_animes(file_name, download_dir):
     if not animes_a_expandir:
         print("❌ No hay episodios pendientes para procesar.")
         return False
-    
+
+    proceso_local_descargar_archivos (download_dir)
+
     # ==================================================================
     # ☁️ FILTRO INTELIGENTE DE GOOGLE SHEETS (Nombre + Episodio)
     # ==================================================================
     print("☁️ Conectando con Google Sheets para verificar el historial previo...")
     sheet_service = obtener_conexion_google_sheets()
-    animes_en_sheet = leer_animes_pendientes(sheet_service) if sheet_service else []
+    animes_en_sheet = leer_animes_pendientes(
+        sheet_service) if sheet_service else []
 
     animes_a_buscar = []
     for anime_obj in animes_a_expandir:
@@ -705,9 +721,10 @@ def flujo_descarga_animes(file_name, download_dir):
             a["nombre"].lower() == nombre_obj and str(a["episodio"]) == ep_obj
             for a in animes_en_sheet
         )
-        
+
         if ya_registrado:
-            print(f"⏩ Omitiendo '{anime_obj.get('nombre')}' (Ep. {ep_obj}): ya se encuentra registrado en Google Sheets.")
+            print(
+                f"⏩ Omitiendo '{anime_obj.get('nombre')}' (Ep. {ep_obj}): ya se encuentra registrado en Google Sheets.")
         else:
             animes_a_buscar.append(anime_obj)
 
@@ -727,10 +744,13 @@ def flujo_descarga_animes(file_name, download_dir):
         print("No se encontraron videos para los animes indicados.")
         return False
 
-    videos_finales = proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados)
+    #videos_finales = proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados)
+
+    # proceso_local_descargar_archivos_continua(download_dir, videos_finales)
     
-    #proceso_local_descargar_archivos (download_dir, videos_finales)
-    
+
+
+
 def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
     """
     Busca los enlaces de descarga, valida si Mega está activo/con cuota,
@@ -756,13 +776,13 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
         # 🛡️ Validación de estado en Mega para cada video encontrado
         print("\n🔎 Validando estado de los enlaces en Mega...")
         videos_finales = []  # <--- Creamos una lista nueva vacía para los resultados limpios
-        
-        for video in videos_brutos:            
+
+        for video in videos_brutos:
             enlace_mega = video.get("link_descarga") or video.get("enlace")
-            
+
             # 1. Evaluamos la validación
             es_valido = validar_enlace_mega(driver, enlace_mega)
-            
+
             if es_valido:
                 # Si es True: Lo marcamos como Pendiente y lo guardamos en la lista temporal
                 print(f"✅ Enlace válido para: {video.get('nombre')}")
@@ -770,7 +790,8 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
                 videos_finales.append(video)
             else:
                 # Si es False: El enlace falló
-                print(f"❌ Enlace caído o con cuota en Mega para {video.get('nombre')}. Buscando en otra fuente...")
+                print(
+                    f"❌ Enlace caído o con cuota en Mega para {video.get('nombre')}. Buscando en otra fuente...")
                 # (Aquí puedes agregar lógica para buscar en otra fuente si lo deseas)
 
     finally:
@@ -787,22 +808,25 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
     # ☁️ Sincronización con Google Sheets
     print("\n☁️ Conectando con Google Sheets para guardar enlaces...")
     sheet_service = obtener_conexion_google_sheets()
-    
+
     if sheet_service:
         guardar_y_actualizar_historial_sheets(sheet_service, videos_finales)
     else:
         print("⚠️ No se pudo guardar en Google Sheets, respaldo local disponible.")
 
     # Respaldo en TXT
-    guardar_resultados_videos_txt(videos_finales, "resultados_videos_con_descarga.txt")
+    guardar_resultados_videos_txt(
+        videos_finales, "resultados_videos_con_descarga.txt")
     print("🎉 Proceso en la nube finalizado con éxito.")
-    
+
     return videos_finales
 
 # ==========================================
 # MÓDULO 2: DESCARGA LOCAL Y ACTUALIZACIÓN
 # ==========================================
-def proceso_local_descargar_archivos(download_dir, videos_finales):
+
+
+def proceso_local_descargar_archivos_continua(download_dir, videos_finales):
     """
     Toma la lista de videos con enlaces válidos y ejecuta la descarga local,
     actualizando el servidor al terminar cada uno.
@@ -813,7 +837,116 @@ def proceso_local_descargar_archivos(download_dir, videos_finales):
 
     print("\nAnimes listos para descargar:")
     for idx, video in enumerate(videos_finales, 1):
-        print(f"{idx}. {video.get('nombre')} [{video.get('estado', 'Desconocido')}]")
+        print(
+            f"{idx}. {video.get('nombre')} [{video.get('estado', 'Desconocido')}]")
+
+    print("\nIniciando descargas automáticamente...")
+
+    driver_servidor = configurar_navegador(download_dir)
+    if driver_servidor is None:
+        print("❌ No se pudo iniciar el navegador para las descargas.")
+        return
+
+    try:
+        for video in videos_finales:
+            link_descarga = video.get("link_descarga")
+
+            # Si el enlace no existe, está caído o la cuota de Mega está agotada, lo saltamos
+            if not link_descarga or link_descarga == "No encontrado" or video.get("estado") in ["Archivo Caído", "Cuota Agotada"]:
+                print(
+                    f"⚠️ Saltando {video.get('nombre')}: enlace no disponible o bloqueado por Mega.")
+                continue
+            
+        # 1. Evaluamos la validación
+            es_valido = validar_enlace_mega(driver_servidor, link_descarga)
+
+            if es_valido:
+                # Si es True: Lo marcamos como Pendiente y lo guardamos en la lista temporal
+                print(f"✅ Enlace válido para: {video.get('nombre')}")
+            else:
+                # Si es False: El enlace falló
+                print(
+                    f"❌ Enlace caído o con cuota en Mega para {video.get('nombre')}. Buscando en otra fuente...")
+                continue
+  
+            print("\n" + "=" * 60)
+            print(f"Descargando: {video.get('nombre')}")
+            print("=" * 60)
+
+            resultado = descargar_video_con_reintentos(
+                video,
+                download_dir,
+                max_intentos=3
+            )
+
+            if not resultado:
+                print(f"❌ No se pudo descargar: {video.get('nombre')}")
+            else:
+                print(f"✅ Video descargado correctamente.")
+
+                # Actualizar el servidor local
+                nombre_servidor = video.get('nombre_anime')
+                episodio_servidor = video.get(
+                    'episodio_buscado') or video.get('episodio')
+
+                if nombre_servidor and episodio_servidor:
+                    marcar_anime_descargado_con_selenium(
+                        driver_servidor,
+                        nombre_servidor,
+                        episodio_servidor
+                    )
+                else:
+                    print(
+                        "⚠️ No se pudieron obtener los datos exactos para actualizar el servidor.")
+
+    finally:
+        try:
+            driver_servidor.quit()
+            print("🔒 Driver de servidor cerrado.")
+        except:
+            pass
+
+
+def proceso_local_descargar_archivos(download_dir):
+    """
+    Se conecta a Google Sheets, lee los animes pendientes, y ejecuta 
+    la descarga local de cada uno, actualizando el servidor al terminar.
+    """
+    print("\n☁️ Conectando con Google Sheets para leer animes pendientes...")
+    sheet_service = obtener_conexion_google_sheets()
+    
+    if not sheet_service:
+        print("❌ No se pudo conectar con Google Sheets.")
+        return
+
+    # 1. Leemos los registros desde tu Google Sheets usando la función que creamos antes
+    registros_hoja = leer_animes_pendientes(sheet_service)
+    
+    if not registros_hoja:
+        print("ℹ️ No hay registros en Google Sheets.")
+        return
+
+    # 2. Filtramos únicamente los que tengan estado "Pendiente"
+    videos_finales = [
+        {
+            "nombre": r.get("nombre"),
+            "nombre_anime": r.get("nombre"), # Compatibilidad por si tu lógica usa esta llave
+            "episodio_buscado": r.get("episodio"),
+            "episodio": r.get("episodio"),
+            "link_descarga": r.get("enlace"),
+            "estado": r.get("estado")
+        }
+        for r in registros_hoja 
+        if r.get("estado", "").lower() == "pendiente"
+    ]
+
+    if not videos_finales:
+        print("🎉 ¡No hay animes con estado 'Pendiente' para descargar en Google Sheets!")
+        return
+
+    print(f"\nAnimes listos para descargar ({len(videos_finales)}):")
+    for idx, video in enumerate(videos_finales, 1):
+        print(f"{idx}. {video.get('nombre')} - Ep: {video.get('episodio_buscado')} [{video.get('estado', 'Desconocido')}]")
 
     print("\nIniciando descargas automáticamente...")
 
@@ -832,22 +965,27 @@ def proceso_local_descargar_archivos(download_dir, videos_finales):
                 continue
 
             print("\n" + "=" * 60)
-            print(f"Descargando: {video.get('nombre')}")
+            print(f"Descargando: {video.get('nombre')} - Episodio {video.get('episodio_buscado')}")
             print("=" * 60)
             
+            '''
             resultado = descargar_video_con_reintentos(
                 video,
                 download_dir,
                 max_intentos=3
             )
+            '''
             
+            resultado = True
+            
+            # Dentro del ciclo de descargas de tu función:
             if not resultado:
                 print(f"❌ No se pudo descargar: {video.get('nombre')}")
             else:
                 print(f"✅ Video descargado correctamente.")
                 
-                # Actualizar el servidor local
-                nombre_servidor = video.get('nombre_anime')
+                # 1. Actualizar el servidor local (tu lógica actual)
+                nombre_servidor = video.get('nombre_anime') or video.get('nombre')
                 episodio_servidor = video.get('episodio_buscado') or video.get('episodio')
                 
                 if nombre_servidor and episodio_servidor:
@@ -855,6 +993,14 @@ def proceso_local_descargar_archivos(download_dir, videos_finales):
                         driver_servidor, 
                         nombre_servidor, 
                         episodio_servidor
+                    )
+                    
+                    actualizar_estado_google_sheets(
+                        sheet_service=sheet_service,
+                        nombre_hoja="Animes",                      # El nombre de la pestaña de tu hoja
+                        nombre_anime=nombre_servidor,
+                        episodio=episodio_servidor,
+                        nuevo_estado="Completado"
                     )
                 else:
                     print("⚠️ No se pudieron obtener los datos exactos para actualizar el servidor.")
