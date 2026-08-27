@@ -199,11 +199,6 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
                 # Aseguramos que la fila tenga las 4 columnas cubiertas
                 while len(fila) < 4:
                     fila.append("Pendiente")
-
-                # Si estaba pendiente, lo pasamos a completado
-                if fila[3].lower() == "pendiente":
-                    fila[3] = "Completado"
-
                 filas_antiguas.append(fila)
 
         # 3. Preparamos los nuevos resultados con su estado correspondiente

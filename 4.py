@@ -10,7 +10,7 @@ from animes.comparador import (
 
 from utilidades.archivos import guardar_resultados_animes_txt, guardar_archivos_descargados, guardar_animes_no_descargados, leer_nombres_animes_a_descargar, mover_videos_y_limpiar_carpetas, eliminar_txt, guardar_resultados_animes_json
 from animes.comparador import obtener_archivos_descargados, comparar_descargas
-from download.descargar import flujo_descarga_animes
+from download.descargar import flujo_descarga_animes , proceso_local_descargar_archivos
 
 
 def procesar_animes(
@@ -80,7 +80,6 @@ def procesar_animes(
 # ============================================================
 
 def menu_dias():
-
     dias = {
         "1": "Lunes",
         "2": "Martes",
@@ -93,83 +92,79 @@ def menu_dias():
     }
 
     while True:
-
         print("\n=== SELECCIONE UN DÍA ===")
-
         for clave, dia in dias.items():
+            print(f"{clave}. {dia}")
 
-            print(
-                f"{clave}. {dia}"
-            )
-
-        opcion = input(
-            "Seleccione un día: "
-        ).strip()
+        opcion = input("Seleccione un día: ").strip()
 
         if opcion == "0":
             return None
 
         if opcion in dias:
             dia = dias[opcion]
-            # Corrección: Uso de f-string para construir la URL de forma limpia
             return f"{SERVIDOR}Anime/Emision/descargar.php?dias={dia}&enviar2=&accion=Filtro"
 
         print("❌ Opción inválida.")
 
-        print(
-            "❌ Opción inválida."
-        )
-
 
 # ============================================================
-# MENÚ PRINCIPAL
+# MENÚ PRINCIPAL MEJORADO
 # ============================================================
 
 def menu_principal(download_dir):
-
     while True:
-
-        print("\n=== MENÚ DE OPCIONES ===")
-
-        print("1. Descargar animes de hoy")
-        print("2. Descargar animes pendientes")
-        print("3. Seleccionar un día")
-        print("4. Sacar videos de carpetas de descargas")
+        print("\n" + "="*40)
+        print("=== MENÚ PRINCIPAL DE GESTIÓN DE ANIMES ===")
+        print("="*40)
+        print("--- 🌐 FASE NUBE Y BÚSQUEDA (Bot) ---")
+        print("1. Buscar animes de hoy (Actualizar Google Sheets)")
+        print("2. Buscar animes pendientes/faltantes (Actualizar Google Sheets)")
+        print("3. Seleccionar un día específico para buscar")
+        print("\n--- 📥 FASE LOCAL (Descargas) ---")
+        print("4. Descargar pendientes desde Google Sheets (Ejecución Local)")
+        print("\n--- 🛠️ UTILIDADES ---")
+        print("5. Sacar videos de carpetas de descargas")
         print("0. Salir")
+        print("="*40)
 
-        opcion = input(
-            "Seleccione una opción: "
-        ).strip()
+        opcion = input("Seleccione una opción: ").strip()
 
+        # Opciones que devuelven URL para el proceso de búsqueda web inicial
         if opcion == "1":
-            # Corrección: Formateo con f-string para devolver la cadena completa
-            return f"{SERVIDOR}Anime/Emision/descargar.php?enviar=&accion=HOY"
+            url = f"{SERVIDOR}Anime/Emision/descargar.php?enviar=&accion=HOY"
+            return {"accion": "buscar", "url": url}
 
         elif opcion == "2":
-            # Corrección: Formateo con f-string (evita el fallo por falta de '+')
-            return f"{SERVIDOR}Anime/Emision/descargar.php?faltantes=&accion=HOY"
+            url = f"{SERVIDOR}Anime/Emision/descargar.php?faltantes=&accion=HOY"
+            return {"accion": "buscar", "url": url}
 
         elif opcion == "3":
             url = menu_dias()
             if url:
-                return url
+                return {"accion": "buscar", "url": url}
 
+        # Opción 4: Lanza la descarga local directa usando Google Sheets
         elif opcion == "4":
+            print("\n--- INICIANDO PROCESO DE DESCARGA LOCAL ---")
+            proceso_local_descargar_archivos(download_dir)
+            # Retorna un indicador para que el bucle principal sepa que no debe abrir URL web
+            return {"accion": "menu_continuar"}
 
+        # Opción 5: Utilidad de archivos
+        elif opcion == "5":
             mover_videos_y_limpiar_carpetas(
                 download_dir,
                 download_dir
             )
+            print("✅ Limpieza de carpetas completada.")
 
         elif opcion == "0":
-
+            print("👋 Saliendo del programa. ¡Hasta luego!")
             return None
 
         else:
-
-            print(
-                "❌ Opción inválida."
-            )
+            print("❌ Opción inválida. Por favor, ingrese un número del 0 al 5.")
 
 
 # ============================================================
@@ -192,50 +187,67 @@ def menu():
         print(
             f"⚠️ La ruta principal no existe. Usando ruta alternativa: {download_dir}")
 
-    # URL de la página a analizar
-    url = menu_principal(download_dir)
+  # 1. Obtener la respuesta estructurada del menú principal
+    resultado_menu = menu_principal(download_dir)
 
-    if url is None or url == "":
+    # Si se seleccionó salir (None) o la respuesta está vacía
+    if not resultado_menu:
         print("No se seleccionó ninguna opción válida. Volviendo al menú principal...")
-        menu()
+        return menu()
 
-    # Extraer y mostrar los nombres de los animes
-    nombres_anime = extraer_nombres_anime(url, download_dir)
+    accion = resultado_menu.get("accion")
 
-    # Guardar los nombres en un archivo .txt
-    guardar_resultados_animes_json(nombres_anime, "resultados_anime.txt")
+    # Si la opción elegida fue la descarga local directa desde Google Sheets (Opción 4)
+    if accion == "menu_continuar":
+        print("\nVolviendo al menú principal...")
+        return menu()
 
-    # Mostrar conteo y los nombres en la consola
-    conteo_anime = len(nombres_anime)
-
-    # Ruta de la carpeta de descargas y archivo de animes
-    archivo_animes = "resultados_anime.txt"
-    archivo_resultado_descargados = "archivos_descargados.txt"
-    archivo_resultado_no_descargados = "animes_no_descargados.txt"
-
-    print(f"Cantidad de animes extraídos: {conteo_anime}")
-    for nombre in nombres_anime:
-        print(nombre)
-
-    print(f"Datos guardados en 'resultados_anime.txt'")
-
-    # Ejecutar la función principal
-    procesar_animes(download_dir, archivo_animes, archivo_resultado_descargados,
-                    archivo_resultado_no_descargados)
-
-    # Ejecutar función principal solo si hay animes por descargar
-    if not os.path.exists(archivo_resultado_no_descargados) or os.path.getsize(archivo_resultado_no_descargados) == 0:
-        print("No se ejecuta la funcion buscar videos de anime")
-    else:
-        continuar_descarga = flujo_descarga_animes(
-            archivo_resultado_no_descargados, download_dir)
-
-        if continuar_descarga is False:
+    # Si la opción elegida requiere hacer web scraping (Opciones 1, 2 o 3)
+    if accion == "buscar":
+        url = resultado_menu.get("url")
+        
+        # Extraer y mostrar los nombres de los animes
+        nombres_anime = extraer_nombres_anime(url, download_dir)
+        
+        if not nombres_anime:
+            print("❌ No se encontraron animes para procesar en esta selección.")
             eliminar_txt()
-            print("\nVolviendo al menú principal...")
             return menu()
 
-    eliminar_txt()
+        archivo_animes = "resultados_anime.txt"
+        archivo_resultado_descargados = "archivos_descargados.txt"
+        archivo_resultado_no_descargados = "animes_no_descargados.txt"
+
+        # Guardar los nombres en el archivo de texto
+        guardar_resultados_animes_json(nombres_anime, archivo_animes)
+
+        print(f"Cantidad de animes extraídos: {len(nombres_anime)}")
+        for nombre in nombres_anime:
+            print(nombre)
+        print(f"Datos guardados en '{archivo_animes}'")
+
+        # Procesar animes detectados
+        procesar_animes(
+            download_dir, 
+            archivo_animes, 
+            archivo_resultado_descargados,
+            archivo_resultado_no_descargados
+        )
+
+        # Validar si hay animes pendientes para buscar enlaces y actualizar Google Sheets
+        if not os.path.exists(archivo_resultado_no_descargados) or os.path.getsize(archivo_resultado_no_descargados) == 0:
+            print("No hay nuevos animes pendientes para buscar videos.")
+        else:
+            continuar_descarga = flujo_descarga_animes(
+                archivo_resultado_no_descargados, download_dir
+            )
+
+            if continuar_descarga is False:
+                eliminar_txt()
+                print("\nVolviendo al menú principal...")
+                return menu()
+
+        eliminar_txt()
 
 
 if __name__ == "__main__":

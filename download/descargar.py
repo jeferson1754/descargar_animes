@@ -701,8 +701,6 @@ def flujo_descarga_animes(file_name, download_dir):
         print("❌ No hay episodios pendientes para procesar.")
         return False
 
-    proceso_local_descargar_archivos (download_dir)
-
     # ==================================================================
     # ☁️ FILTRO INTELIGENTE DE GOOGLE SHEETS (Nombre + Episodio)
     # ==================================================================
@@ -744,7 +742,7 @@ def flujo_descarga_animes(file_name, download_dir):
         print("No se encontraron videos para los animes indicados.")
         return False
 
-    #videos_finales = proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados)
+    videos_finales = proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados)
 
     # proceso_local_descargar_archivos_continua(download_dir, videos_finales)
     
@@ -968,13 +966,12 @@ def proceso_local_descargar_archivos(download_dir):
             print(f"Descargando: {video.get('nombre')} - Episodio {video.get('episodio_buscado')}")
             print("=" * 60)
             
-            '''
+            
             resultado = descargar_video_con_reintentos(
                 video,
                 download_dir,
                 max_intentos=3
             )
-            '''
             
             resultado = True
             
