@@ -9,7 +9,7 @@ from utilidades.archivos import leer_nombres_desde_txt, guardar_resultados_video
 from utilidades.navegador import configurar_navegador
 from animes.buscador import buscar_en_fuentes
 from config import FUENTES_ANIME, SERVIDOR
-from base_excel import obtener_conexion_google_sheets, guardar_y_actualizar_historial_sheets, leer_animes_pendientes, actualizar_estado_google_sheets
+from base_excel import obtener_conexion_google_sheets, guardar_y_actualizar_historial_sheets, leer_animes_pendientes, actualizar_estado_google_sheets, guardar_logs_en_sheets
 from notificaciones_telegram import enviar_mensaje_telegram
 
 def verificar_descarga(
@@ -816,6 +816,8 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
     guardar_resultados_videos_txt(
         videos_finales, "resultados_videos_con_descarga.txt")
     print("🎉 Proceso en la nube finalizado con éxito.")
+    
+    guardar_logs_en_sheets(sheet_service)
 
     return videos_finales
 

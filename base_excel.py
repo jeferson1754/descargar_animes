@@ -124,7 +124,7 @@ def leer_animes_pendientes(sheet_service):
     una lista con los animes ya registrados para evitar duplicados o búsquedas innecesarias.
     """
     if not sheet_service:
-        print("❌ No hay conexión activa con Google Sheets.")
+        logging.ERROR("❌ No hay conexión activa con Google Sheets.")
         return []
 
     try:
@@ -139,7 +139,7 @@ def leer_animes_pendientes(sheet_service):
         filas_totales_hoja = result.get("values", [])
 
         if not filas_totales_hoja:
-            print("ℹ️ La hoja de cálculo está vacía.")
+            logging.info("ℹ️ La hoja de cálculo está vacía.")
             return []
 
         # Omitimos la cabecera (fila 1)
@@ -168,12 +168,12 @@ def leer_animes_pendientes(sheet_service):
                     "estado": estado
                 })
 
-        print(
+        logging.info(
             f"📖 Se leyeron {len(animes_registrados)} registros previos desde Google Sheets.")
         return animes_registrados
 
     except Exception as e:
-        print(f"❌ Error al leer los animes desde Google Sheets: {e}")
+        logging.error(f"❌ Error al leer los animes desde Google Sheets: {e}")
         return []
 
 
@@ -183,7 +183,7 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
     marca lo viejo como 'Completado' y actualiza la hoja sin rangos fijos.
     """
     if not sheet_service:
-        print("❌ No hay conexión activa con Google Sheets.")
+        logging.error("❌ No hay conexión activa con Google Sheets.")
         return False
 
     try:
@@ -234,7 +234,7 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
             ])
 
         if not filas_nuevas:
-            print("ℹ️ No hay registros nuevos para actualizar en Google Sheets.")
+            logging.info("ℹ️ No hay registros nuevos para actualizar en Google Sheets.")
             return False
 
         # 4. Combinamos: Lo nuevo arriba, lo viejo abajo
@@ -265,7 +265,7 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
             body=body
         ).execute()
 
-        print(
+        logging.info(
             f"✅ Google Sheets sincronizado con fechas y fuentes: {len(filas_nuevas)} registros nuevos arriba.")
         # Al finalizar exitosamente 'guardar_y_actualizar_historial_sheets':
         if not resultados_animes:
@@ -288,7 +288,7 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         return True
 
     except Exception as e:
-        print(f"❌ Error al actualizar el historial en Google Sheets: {e}")
+        logging.info(f"❌ Error al actualizar el historial en Google Sheets: {e}")
         return False
 
 
@@ -308,7 +308,7 @@ def actualizar_estado_google_sheets(sheet_service, nombre_hoja, nombre_anime, ep
         filas = resultado_lectura.get('values', [])
 
         if not filas:
-            print("❌ La hoja de Google Sheets está vacía.")
+            logging.error("❌ La hoja de Google Sheets está vacía.")
             return False
 
         # Definimos las posiciones fijas de tus columnas
@@ -328,7 +328,7 @@ def actualizar_estado_google_sheets(sheet_service, nombre_hoja, nombre_anime, ep
                     break
 
         if not fila_encontrada_num:
-            print(
+            logging.error(
                 f"⚠️ No se encontró '{nombre_anime}' Ep. {episodio} en Google Sheets para actualizar.")
             return False
 
@@ -348,11 +348,11 @@ def actualizar_estado_google_sheets(sheet_service, nombre_hoja, nombre_anime, ep
             body=body
         ).execute()
 
-        print(
+        logging.info(
             f"✅ Google Sheets actualizado: '{nombre_anime}' (Ep. {episodio}) -> '{nuevo_estado}' [Fecha: {tiempo_actual}]")
         return True
     except Exception as e:
-        print(f"❌ Error al actualizar Google Sheets: {e}")
+        logging.error(f"❌ Error al actualizar Google Sheets: {e}")
         return False
 
 
@@ -372,7 +372,7 @@ def verificar_animes_desaparecidos(sheet_service, animes_registrados_sheets, ani
         if nombre and episodio:
             animes_web_set.add((nombre, episodio))
 
-    print("🔍 Verificando animes pendientes frente al servidor actual...")
+    logging.info("🔍 Verificando animes pendientes frente al servidor actual...")
 
     actualizaciones_realizadas = 0
 
@@ -384,7 +384,7 @@ def verificar_animes_desaparecidos(sheet_service, animes_registrados_sheets, ani
 
             # Si el anime y episodio que estaban pendientes YA NO figuran en la web actual
             if (nombre_sheet, episodio_sheet) not in animes_web_set:
-                print(f"🔄 '{item.get('nombre')}' Ep. {episodio_sheet} ya no está en la web. Cambiando a 'Completado'...")
+                logging.info(f"🔄 '{item.get('nombre')}' Ep. {episodio_sheet} ya no está en la web. Cambiando a 'Completado'...")
                 
                 exito = actualizar_estado_google_sheets(
                     sheet_service, 
@@ -398,6 +398,70 @@ def verificar_animes_desaparecidos(sheet_service, animes_registrados_sheets, ani
                     actualizaciones_realizadas += 1
 
     if actualizaciones_realizadas > 0:
-        print(f"✅ Se actualizaron {actualizaciones_realizadas} animes a 'Completado'.")
+        logging.info(f"✅ Se actualizaron {actualizaciones_realizadas} animes a 'Completado'.")
     else:
-        print("ℹ️ Todos los animes pendientes siguen vigentes en el servidor.")
+        logging.info("ℹ️ Todos los animes pendientes siguen vigentes en el servidor.")
+
+def guardar_logs_en_sheets(service):
+    """Envía los logs a la pestaña Historial, insertándolos ARRIBA (Fila 2)."""
+    global logs_acumulados_sheets
+
+    if not logs_acumulados_sheets:
+        return
+
+    nombre_hoja_historial = "Historial"
+
+    try:
+        # 1. Preparamos el bloque de logs
+        logs_a_subir = [
+            ["", "──────────────────────────────────────────────────"]] + logs_acumulados_sheets
+        cantidad_filas = len(logs_a_subir)
+
+        # 2. Obtenemos el sheetId interno de la pestaña "Historial"
+        sheet_metadata = service.spreadsheets().get(
+            spreadsheetId=SPREADSHEET_ID).execute()
+        sheet_id = None
+        for sheet in sheet_metadata.get('sheets', []):
+            if sheet['properties']['title'] == nombre_hoja_historial:
+                sheet_id = sheet['properties']['sheetId']
+                break
+
+        if sheet_id is None:
+            logging.error(
+                f"⚠️ No se encontró la pestaña {nombre_hoja_historial}.")
+            return
+
+        # 3. Insertamos filas en blanco EXACTAMENTE debajo de la cabecera (Fila 2 / startIndex: 1)
+        # Esto empuja todo el historial viejo hacia abajo sin borrar nada
+        requests = [{
+            "insertDimension": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "dimension": "ROWS",
+                    "startIndex": 1,  # Índice 1 = Fila 2 en Sheets
+                    "endIndex": 1 + cantidad_filas
+                },
+                "inheritFromBefore": False
+            }
+        }]
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=SPREADSHEET_ID,
+            body={"requests": requests}
+        ).execute()
+
+        # 4. Escribimos los logs nuevos en ese hueco que acabamos de crear (desde A2)
+        service.spreadsheets().values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"{nombre_hoja_historial}!A2",
+            valueInputOption="USER_ENTERED",
+            body={"values": logs_a_subir}
+        ).execute()
+
+        logging.info(
+            "📊 ¡Historial actualizado en la parte SUPERIOR de la hoja!")
+
+        # Limpiamos la lista para la próxima vez
+        logs_acumulados_sheets.clear()
+
+    except Exception as e:
+        logging.error(f"⚠️ No se pudieron subir los logs a Sheets: {e}")

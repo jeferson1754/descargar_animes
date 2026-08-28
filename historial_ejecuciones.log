@@ -96,3 +96,9 @@
 2026-08-28 10:24:46 │ WARNING  │ Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<urllib3.connection.HTTPConnection object at 0x0000019CAFA4E510>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión')': /session/3d80c0387b95fa5a0c0c01d47b35888f
 2026-08-28 10:24:50 │ WARNING  │ Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<urllib3.connection.HTTPConnection object at 0x0000019CB1E6A5D0>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión')': /session/3d80c0387b95fa5a0c0c01d47b35888f
 2026-08-28 10:37:02 │ WARNING  │ Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ConnectionResetError(10054, 'Se ha forzado la interrupción de una conexión existente por el host remoto', None, 10054, None)': /session/fe9709cacb2030c6eac33a267badad48
+2026-08-28 12:35:48 │ INFO     │ 📖 Se leyeron 26 registros previos desde Google Sheets.
+2026-08-28 12:35:48 │ INFO     │ 🔍 Verificando animes pendientes frente al servidor actual...
+2026-08-28 12:35:48 │ INFO     │ ℹ️ Todos los animes pendientes siguen vigentes en el servidor.
+2026-08-28 12:35:49 │ INFO     │ 📖 Se leyeron 26 registros previos desde Google Sheets.
+2026-08-28 12:37:18 │ INFO     │ ✅ Google Sheets sincronizado con fechas y fuentes: 1 registros nuevos arriba.
+2026-08-28 12:37:20 │ INFO     │ 📊 ¡Historial actualizado en la parte SUPERIOR de la hoja!
