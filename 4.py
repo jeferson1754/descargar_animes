@@ -11,7 +11,7 @@ from animes.comparador import (
 from utilidades.archivos import guardar_resultados_animes_txt, guardar_archivos_descargados, guardar_animes_no_descargados, leer_nombres_animes_a_descargar, mover_videos_y_limpiar_carpetas, eliminar_txt, guardar_resultados_animes_json
 from animes.comparador import obtener_archivos_descargados, comparar_descargas
 from download.descargar import flujo_descarga_animes , proceso_local_descargar_archivos
-
+from base_excel import obtener_conexion_google_sheets, leer_animes_pendientes, verificar_animes_desaparecidos
 
 def procesar_animes(
     download_dir,
@@ -213,6 +213,14 @@ def menu():
             print("❌ No se encontraron animes para procesar en esta selección.")
             eliminar_txt()
             return menu()
+        
+        # 2. Obtener conexión y leer lo que ya está en Google Sheets
+        sheet_service = obtener_conexion_google_sheets()
+        if sheet_service:
+            animes_previos_sheets = leer_animes_pendientes(sheet_service)
+        
+            # 3. EJECUTAR LA VALIDACIÓN: Marcar como completados los que ya no salgan en la web
+            verificar_animes_desaparecidos(sheet_service, animes_previos_sheets, nombres_anime)
 
         archivo_animes = "resultados_anime.txt"
         archivo_resultado_descargados = "archivos_descargados.txt"

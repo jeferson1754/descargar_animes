@@ -13,3 +13,5 @@ __pycache__/
 # Credenciales Google
 client_secret.json
 token.pickle
+
+notificaciones_telegram.py

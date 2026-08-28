@@ -210,10 +210,11 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         filas_nuevas = []
         for anime in resultados_animes:
             nombre_anime = anime.get("nombre_anime") or anime.get("nombre", "")
-            episodio = anime.get("episodio", "") or anime.get("episodio_buscado", "")
+            episodio = anime.get("episodio", "") or anime.get(
+                "episodio_buscado", "")
             link_descarga = anime.get("link_descarga", "")
             fuente = anime.get("fuente", "TioAnime")
-            
+
             # Si el anime ya traía fecha de detección anterior se respeta, si es nuevo se pone la actual
             f_deteccion = anime.get("fecha_deteccion") or tiempo_actual
             f_actualizacion = anime.get("fecha_actualizacion", "")
@@ -221,13 +222,13 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
             estado = anime.get("estado", "Pendiente")
 
             filas_nuevas.append([
-                nombre_anime, 
-                str(episodio), 
-                link_descarga, 
-                fuente, 
-                f_deteccion, 
-                f_actualizacion, 
-                f_descarga, 
+                nombre_anime,
+                str(episodio),
+                link_descarga,
+                fuente,
+                f_deteccion,
+                f_actualizacion,
+                f_descarga,
                 estado
             ])
 
@@ -240,7 +241,7 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
 
         # Agregamos de nuevo la cabecera al principio de todo el bloque
         filas_finales = [[
-            "Anime", "Episodio", "Enlace", "Fuente", 
+            "Anime", "Episodio", "Enlace", "Fuente",
             "Fecha Detección", "Fecha Actualización", "Fecha Descarga", "Estado"
         ]] + nuevos_datos_combinados
 
@@ -284,33 +285,32 @@ def actualizar_estado_google_sheets(sheet_service, nombre_hoja, nombre_anime, ep
             spreadsheetId=SPREADSHEET_ID,
             range=rango_lectura
         ).execute()
-        
+
         filas = resultado_lectura.get('values', [])
-        
+
         if not filas:
             print("❌ La hoja de Google Sheets está vacía.")
             return False
-        
+
         # Definimos las posiciones fijas de tus columnas
         col_nombre_idx = 0  # Columna A
         col_ep_idx = 1      # Columna B
-        col_f_descarga_idx = 6 # Columna G (Fecha Descarga)
+        col_f_descarga_idx = 6  # Columna G (Fecha Descarga)
         col_estado_idx = 7  # Columna H (Estado)
-
-
 
         fila_encontrada_num = None
         for index, fila in enumerate(filas[1:], start=2):
             if len(fila) > max(col_nombre_idx, col_ep_idx):
                 val_nombre = str(fila[col_nombre_idx]).strip().lower()
                 val_ep = str(fila[col_ep_idx]).strip()
-                
+
                 if val_nombre == str(nombre_anime).strip().lower() and val_ep == str(episodio).strip():
                     fila_encontrada_num = index
                     break
 
         if not fila_encontrada_num:
-            print(f"⚠️ No se encontró '{nombre_anime}' Ep. {episodio} en Google Sheets para actualizar.")
+            print(
+                f"⚠️ No se encontró '{nombre_anime}' Ep. {episodio} en Google Sheets para actualizar.")
             return False
 
         tiempo_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -321,7 +321,7 @@ def actualizar_estado_google_sheets(sheet_service, nombre_hoja, nombre_anime, ep
         body = {
             "values": [[tiempo_actual, nuevo_estado]]
         }
-        
+
         sheet_service.spreadsheets().values().update(
             spreadsheetId=SPREADSHEET_ID,
             range=celda_destino,
@@ -329,8 +329,56 @@ def actualizar_estado_google_sheets(sheet_service, nombre_hoja, nombre_anime, ep
             body=body
         ).execute()
 
-        print(f"✅ Google Sheets actualizado: '{nombre_anime}' (Ep. {episodio}) -> '{nuevo_estado}' [Fecha: {tiempo_actual}]")
+        print(
+            f"✅ Google Sheets actualizado: '{nombre_anime}' (Ep. {episodio}) -> '{nuevo_estado}' [Fecha: {tiempo_actual}]")
         return True
     except Exception as e:
         print(f"❌ Error al actualizar Google Sheets: {e}")
         return False
+
+
+def verificar_animes_desaparecidos(sheet_service, animes_registrados_sheets, animes_encontrados_web):
+    """
+    Compara los animes pendientes en Google Sheets con los encontrados en la web.
+    Si un anime pendiente ya no está en la web, actualiza su estado a 'Completado'.
+    """
+    if not sheet_service:
+        return
+
+# Normalizamos correctamente los datos que vienen de la web
+    animes_web_set = set()
+    for a in animes_encontrados_web:
+        nombre = str(a.get("nombre_anime", a.get("nombre", ""))).strip().lower()
+        episodio = str(a.get("episodio", a.get("episodio_buscado", ""))).strip()
+        if nombre and episodio:
+            animes_web_set.add((nombre, episodio))
+
+    print("🔍 Verificando animes pendientes frente al servidor actual...")
+
+    actualizaciones_realizadas = 0
+
+    for item in animes_registrados_sheets:
+        # Solo evaluamos registros que estén estrictamente como "Pendiente"
+        if item.get("estado", "").strip().lower() == "pendiente":
+            nombre_sheet = str(item.get("nombre", "")).strip().lower()
+            episodio_sheet = str(item.get("episodio", "")).strip()
+
+            # Si el anime y episodio que estaban pendientes YA NO figuran en la web actual
+            if (nombre_sheet, episodio_sheet) not in animes_web_set:
+                print(f"🔄 '{item.get('nombre')}' Ep. {episodio_sheet} ya no está en la web. Cambiando a 'Completado'...")
+                
+                exito = actualizar_estado_google_sheets(
+                    sheet_service, 
+                    nombre_hoja="Animes", 
+                    nombre_anime=item.get("nombre"), 
+                    episodio=episodio_sheet, 
+                    nuevo_estado="Completado"
+                )
+                
+                if exito:
+                    actualizaciones_realizadas += 1
+
+    if actualizaciones_realizadas > 0:
+        print(f"✅ Se actualizaron {actualizaciones_realizadas} animes a 'Completado'.")
+    else:
+        print("ℹ️ Todos los animes pendientes siguen vigentes en el servidor.")
