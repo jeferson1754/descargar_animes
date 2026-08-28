@@ -14,4 +14,4 @@ __pycache__/
 client_secret.json
 token.pickle
 
-notificaciones_telegram.py
+.env

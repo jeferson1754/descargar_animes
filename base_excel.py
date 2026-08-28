@@ -9,6 +9,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from notificaciones_telegram import enviar_mensaje_telegram
 
 # --- CONFIGURACIÓN ---
 SCOPES = [
@@ -266,6 +267,24 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
 
         print(
             f"✅ Google Sheets sincronizado con fechas y fuentes: {len(filas_nuevas)} registros nuevos arriba.")
+        # Al finalizar exitosamente 'guardar_y_actualizar_historial_sheets':
+        if not resultados_animes:
+            return
+        # Construimos la lista de animes de forma limpia para el mensaje
+        lista_detallada = ""
+        for anime in resultados_animes:
+            nombre = anime.get("nombre_anime") or anime.get("nombre", "Desconocido")
+            episodio = anime.get("episodio", "") or anime.get("episodio_buscado", "")
+            lista_detallada += f"• *{nombre}* (Ep. {episodio})\n"
+
+        mensaje = (
+            f"🤖 *Bot de Animes*\n\n"
+            f"✅ Búsqueda finalizada.\n"
+            f"📂 Se registraron *{len(filas_nuevas)}* nuevos animes/episodios como Pendientes:\n\n"
+            f"{lista_detallada}"
+        )
+
+        enviar_mensaje_telegram(mensaje)
         return True
 
     except Exception as e:

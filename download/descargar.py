@@ -10,7 +10,7 @@ from utilidades.navegador import configurar_navegador
 from animes.buscador import buscar_en_fuentes
 from config import FUENTES_ANIME, SERVIDOR
 from base_excel import obtener_conexion_google_sheets, guardar_y_actualizar_historial_sheets, leer_animes_pendientes, actualizar_estado_google_sheets
-
+from notificaciones_telegram import enviar_mensaje_telegram
 
 def verificar_descarga(
     download_dir,
@@ -960,6 +960,9 @@ def proceso_local_descargar_archivos(download_dir):
             # Si el enlace no existe, está caído o la cuota de Mega está agotada, lo saltamos
             if not link_descarga or link_descarga == "No encontrado" or video.get("estado") in ["Archivo Caído", "Cuota Agotada"]:
                 print(f"⚠️ Saltando {video.get('nombre')}: enlace no disponible o bloqueado por Mega.")
+                # Cuando detectes que un archivo no está disponible o da error de cuota:
+                mensaje = f"⚠️ *Alerta de Enlace*\n\n🎬 Anime: *{video.get('nombre')}*\n🔴 Estado: Archivo Caído o Cuota Agotada."
+                enviar_mensaje_telegram(mensaje)
                 continue
 
             print("\n" + "=" * 60)
@@ -984,6 +987,10 @@ def proceso_local_descargar_archivos(download_dir):
                 # 1. Actualizar el servidor local (tu lógica actual)
                 nombre_servidor = video.get('nombre_anime') or video.get('nombre')
                 episodio_servidor = video.get('episodio_buscado') or video.get('episodio')
+                
+                # Dentro del bloque 'else' cuando tu script local completa la descarga y actualiza a Completado:
+                mensaje = f"📥 *Descarga Exitosa*\n\n🎬 Anime: *{nombre_servidor}*\n📺 Episodio: *{episodio_servidor}*\n🟢 Estado: Completado y Servidor Local actualizado."
+                enviar_mensaje_telegram(mensaje)
                 
                 if nombre_servidor and episodio_servidor:
                     marcar_anime_descargado_con_selenium(
