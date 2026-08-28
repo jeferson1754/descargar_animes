@@ -1,6 +1,7 @@
 # animes/buscador.py
 import time
 import re
+import logging
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -19,7 +20,7 @@ def extraer_nombres_anime(url, download_dir):
     driver = configurar_navegador(download_dir)
     
     if driver is None:
-        print("❌ No se pudo iniciar el navegador.")
+        logging.error("❌ No se pudo iniciar el navegador.")
         return []
 
     try:
@@ -31,7 +32,7 @@ def extraer_nombres_anime(url, download_dir):
                 EC.presence_of_element_located((By.CSS_SELECTOR, "#animeTable tbody"))
             )
         except TimeoutException:
-            print("⚠️ No se encontró la tabla de animes o la página demoró en cargar.")
+            logging.error("⚠️ No se encontró la tabla de animes o la página demoró en cargar.")
             return []
 
         # 2. BÚSQUEDA FILTRADA: Selecciona solo filas (tr) que tengan la etiqueta 'episode-pending'
@@ -98,7 +99,7 @@ def extraer_nombres_anime(url, download_dir):
                 animes.append(anime)
 
             except Exception as e:
-                print(f"⚠️ Error procesando fila con pendiente: {e}")
+                logging.error(f"⚠️ Error procesando fila con pendiente: {e}")
 
         return animes
 
@@ -125,12 +126,12 @@ def buscar_en_fuentes(animes, fuentes):
         nombre = anime.get("nombre")
         episodio_buscado = anime.get("episodio_buscado")
 
-        print("\n" + "=" * 60)
-        print(f"🔎 Buscando: {nombre}")
-        print(
+        logging.info("\n" + "=" * 60)
+        logging.info(f"🔎 Buscando: {nombre}")
+        logging.info(
             f"🎯 Episodio: {episodio_buscado}"
         )
-        print("=" * 60)
+        logging.info("=" * 60)
 
         encontrado = False
 
@@ -143,7 +144,7 @@ def buscar_en_fuentes(animes, fuentes):
             url_fuente = fuente["url"]
             funcion_busqueda = fuente["buscar"]
 
-            print(
+            logging.info(
                 f"🌐 Probando fuente: "
                 f"{nombre_fuente}"
             )
@@ -159,7 +160,7 @@ def buscar_en_fuentes(animes, fuentes):
 
                 if videos:
 
-                    print(
+                    logging.info(
                         f"✅ Encontrado en "
                         f"{nombre_fuente}"
                     )
@@ -177,14 +178,14 @@ def buscar_en_fuentes(animes, fuentes):
                     encontrado = True
                     break
 
-                print(
+                logging.error(
                     f"❌ {nombre_fuente}: "
                     f"episodio no encontrado."
                 )
 
             except Exception as e:
 
-                print(
+                logging.error(
                     f"⚠️ Error en "
                     f"{nombre_fuente}: {type(e).__name__}: {e}"
                 )
@@ -193,7 +194,7 @@ def buscar_en_fuentes(animes, fuentes):
 
         if not encontrado:
 
-            print(
+            logging.error(
                 f"❌ No se encontró "
                 f"{nombre} "
                 f"episodio {episodio_buscado}"

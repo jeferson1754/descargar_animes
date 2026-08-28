@@ -1,5 +1,6 @@
 import re
 import os
+import logging
 
 from utilidades.archivos import extraer_episodio_archivo
 
@@ -36,7 +37,7 @@ def obtener_archivos_descargados(download_dir):
             archivo for archivo in archivos_descargados if archivo.endswith(".mp4")]
         return archivos_mp4
     except FileNotFoundError:
-        print("El directorio de descargas no se encontró.")
+        logging.error("El directorio de descargas no se encontró.")
         return []
 
 
@@ -115,7 +116,7 @@ def comparar_descargas(
 
                 encontrado = True
 
-                print(
+                logging.info(
                     f"✅ Ya descargado: "
                     f"{nombre_anime} "
                     f"Episodio {episodio_buscado}"
@@ -125,7 +126,7 @@ def comparar_descargas(
 
         if not encontrado:
 
-            print(
+            logging.info(
                 f"⬇️ Pendiente: "
                 f"{nombre_anime} "
                 f"Episodio {episodio_buscado}"
