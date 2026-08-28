@@ -1,6 +1,7 @@
 import os
 from config import DOWNLOAD_DIR, DOWNLOAD_DIR_2, SERVIDOR
 from animes.buscador import extraer_nombres_anime
+import logging
 
 from animes.comparador import (
     obtener_archivos_descargados,
@@ -39,7 +40,7 @@ def procesar_animes(
     )
     
     if not animes_a_descargar:
-        print("✅ No hay animes pendientes por descargar según la base de datos.")
+        logging.info("✅ No hay animes pendientes por descargar según la base de datos.")
         # Limpiamos los archivos de registro anteriores
         guardar_animes_no_descargados([], archivo_resultado_no_descargados)
         return False
@@ -47,9 +48,9 @@ def procesar_animes(
     # No hay archivos descargados todavía
     # --------------------------------------------------
 
-    print(f"\n📺 Animes pendientes por procesar ({len(animes_a_descargar)}):")
+    logging.info(f"\n📺 Animes pendientes por procesar ({len(animes_a_descargar)}):")
     for anime in animes_a_descargar:
-        print(f"   • {anime}")
+        logging.info(f"   • {anime}")
 
     # --------------------------------------------------
     # Registrar archivos descargados
@@ -146,7 +147,7 @@ def menu_principal(download_dir):
 
         # Opción 4: Lanza la descarga local directa usando Google Sheets
         elif opcion == "4":
-            print("\n--- INICIANDO PROCESO DE DESCARGA LOCAL ---")
+            logging.info("\n--- INICIANDO PROCESO DE DESCARGA LOCAL ---")
             proceso_local_descargar_archivos(download_dir)
             # Retorna un indicador para que el bucle principal sepa que no debe abrir URL web
             return {"accion": "menu_continuar"}
@@ -157,14 +158,14 @@ def menu_principal(download_dir):
                 download_dir,
                 download_dir
             )
-            print("✅ Limpieza de carpetas completada.")
+            logging.info("✅ Limpieza de carpetas completada.")
 
         elif opcion == "0":
-            print("👋 Saliendo del programa. ¡Hasta luego!")
+            logging.info("👋 Saliendo del programa. ¡Hasta luego!")
             return None
 
         else:
-            print("❌ Opción inválida. Por favor, ingrese un número del 0 al 5.")
+            logging.info("❌ Opción inválida. Por favor, ingrese un número del 0 al 5.")
 
 
 # ============================================================
@@ -210,7 +211,7 @@ def menu():
         nombres_anime = extraer_nombres_anime(url, download_dir)
         
         if not nombres_anime:
-            print("❌ No se encontraron animes para procesar en esta selección.")
+            logging.error("❌ No se encontraron animes para procesar en esta selección.")
             eliminar_txt()
             return menu()
         
@@ -229,10 +230,10 @@ def menu():
         # Guardar los nombres en el archivo de texto
         guardar_resultados_animes_json(nombres_anime, archivo_animes)
 
-        print(f"Cantidad de animes extraídos: {len(nombres_anime)}")
+        logging.info(f"Cantidad de animes extraídos: {len(nombres_anime)}")
         for nombre in nombres_anime:
-            print(nombre)
-        print(f"Datos guardados en '{archivo_animes}'")
+            logging.info(nombre)
+        logging.info(f"Datos guardados en '{archivo_animes}'")
 
         # Procesar animes detectados
         procesar_animes(
@@ -244,7 +245,7 @@ def menu():
 
         # Validar si hay animes pendientes para buscar enlaces y actualizar Google Sheets
         if not os.path.exists(archivo_resultado_no_descargados) or os.path.getsize(archivo_resultado_no_descargados) == 0:
-            print("No hay nuevos animes pendientes para buscar videos.")
+            logging.info("No hay nuevos animes pendientes para buscar videos.")
         else:
             continuar_descarga = flujo_descarga_animes(
                 archivo_resultado_no_descargados, download_dir
