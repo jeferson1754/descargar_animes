@@ -816,8 +816,6 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
     guardar_resultados_videos_txt(
         videos_finales, "resultados_videos_con_descarga.txt")
     logging.info("🎉 Proceso en la nube finalizado con éxito.")
-    
-    guardar_logs_en_sheets(sheet_service)
 
     return videos_finales
 

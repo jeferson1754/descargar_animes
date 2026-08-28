@@ -102,3 +102,314 @@
 2026-08-28 12:35:49 │ INFO     │ 📖 Se leyeron 26 registros previos desde Google Sheets.
 2026-08-28 12:37:18 │ INFO     │ ✅ Google Sheets sincronizado con fechas y fuentes: 1 registros nuevos arriba.
 2026-08-28 12:37:20 │ INFO     │ 📊 ¡Historial actualizado en la parte SUPERIOR de la hoja!
+2026-08-28 13:04:02 │ INFO     │ 📖 Se leyeron 27 registros previos desde Google Sheets.
+2026-08-28 13:04:02 │ INFO     │ 🔍 Verificando animes pendientes frente al servidor actual...
+2026-08-28 13:04:02 │ INFO     │ ℹ️ Todos los animes pendientes siguen vigentes en el servidor.
+2026-08-28 13:04:02 │ INFO     │ Cantidad de animes extraídos: 5
+2026-08-28 13:04:02 │ INFO     │ {'nombre': 'Kami no Shizuku', 'episodio_actual': 20, 'episodios_totales': 24, 'pendientes': 1, 'episodio_buscado': 21}
+2026-08-28 13:04:02 │ INFO     │ {'nombre': 'Kore Kaite Shine', 'episodio_actual': 7, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 8}
+2026-08-28 13:04:02 │ INFO     │ {'nombre': 'Nige Jouzu no Wakagimi  2nd Season', 'episodio_actual': 6, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 7}
+2026-08-28 13:04:02 │ INFO     │ {'nombre': 'Uchi no Otouto-domo ga Sumimasen', 'episodio_actual': 8, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 9}
+2026-08-28 13:04:02 │ INFO     │ {'nombre': 'Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season', 'episodio_actual': 8, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 9}
+2026-08-28 13:04:02 │ INFO     │ Datos guardados en 'resultados_anime.txt'
+2026-08-28 13:04:02 │ INFO     │ 
+📺 Animes pendientes por procesar (5):
+2026-08-28 13:04:02 │ INFO     │    • {'nombre': 'Kami no Shizuku', 'episodio_actual': 20, 'episodios_totales': 24, 'pendientes': 1, 'episodio_buscado': 21}
+2026-08-28 13:04:02 │ INFO     │    • {'nombre': 'Kore Kaite Shine', 'episodio_actual': 7, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 8}
+2026-08-28 13:04:02 │ INFO     │    • {'nombre': 'Nige Jouzu no Wakagimi  2nd Season', 'episodio_actual': 6, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 7}
+2026-08-28 13:04:02 │ INFO     │    • {'nombre': 'Uchi no Otouto-domo ga Sumimasen', 'episodio_actual': 8, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 9}
+2026-08-28 13:04:02 │ INFO     │    • {'nombre': 'Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season', 'episodio_actual': 8, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 9}
+2026-08-28 13:04:02 │ INFO     │ ☁️ Conectando con Google Sheets para verificar el historial previo...
+2026-08-28 13:04:03 │ INFO     │ 📖 Se leyeron 27 registros previos desde Google Sheets.
+2026-08-28 13:04:03 │ INFO     │ ⏩ Omitiendo 'Kami no Shizuku' (Ep. 21): ya se encuentra registrado en Google Sheets.
+2026-08-28 13:04:03 │ INFO     │ ⏩ Omitiendo 'Kore Kaite Shine' (Ep. 8): ya se encuentra registrado en Google Sheets.
+2026-08-28 13:04:03 │ INFO     │ ⏩ Omitiendo 'Nige Jouzu no Wakagimi  2nd Season' (Ep. 7): ya se encuentra registrado en Google Sheets.
+2026-08-28 13:04:03 │ INFO     │ Buscando videos relacionados...
+2026-08-28 13:04:05 │ INFO     │ 
+============================================================
+2026-08-28 13:04:05 │ INFO     │ 🔎 Buscando: Uchi no Otouto-domo ga Sumimasen
+2026-08-28 13:04:05 │ INFO     │ 🎯 Episodio: 9
+2026-08-28 13:04:05 │ INFO     │ ============================================================
+2026-08-28 13:04:05 │ INFO     │ 🌐 Probando fuente: TioAnime
+2026-08-28 13:04:16 │ INFO     │ ✅ Encontrado en TioAnime
+2026-08-28 13:04:20 │ INFO     │ 
+============================================================
+2026-08-28 13:04:20 │ INFO     │ 🔎 Buscando: Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season
+2026-08-28 13:04:20 │ INFO     │ 🎯 Episodio: 9
+2026-08-28 13:04:20 │ INFO     │ ============================================================
+2026-08-28 13:04:20 │ INFO     │ 🌐 Probando fuente: TioAnime
+2026-08-28 13:05:10 │ ERROR    │ ❌ TioAnime: episodio no encontrado.
+2026-08-28 13:05:12 │ ERROR    │ ❌ No se encontró Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season episodio 9
+2026-08-28 13:05:21 │ INFO     │ 
+🔎 Validando estado de los enlaces en Mega...
+2026-08-28 13:05:28 │ INFO     │ ✅ Enlace válido para: Uchi no Otouto-domo ga Sumimasen 9
+2026-08-28 13:05:30 │ INFO     │ 🔒 Driver de búsqueda cerrado.
+2026-08-28 13:05:30 │ INFO     │ 
+☁️ Conectando con Google Sheets para guardar enlaces...
+2026-08-28 13:05:32 │ INFO     │ ✅ Google Sheets sincronizado con fechas y fuentes: 1 registros nuevos arriba.
+2026-08-28 13:05:40 │ INFO     │ 🎉 Proceso en la nube finalizado con éxito.
+2026-08-28 13:05:41 │ INFO     │ 📊 ¡Historial actualizado en la parte SUPERIOR de la hoja!
+2026-08-28 13:06:33 │ INFO     │ 📖 Se leyeron 28 registros previos desde Google Sheets.
+2026-08-28 13:06:33 │ INFO     │ 🔍 Verificando animes pendientes frente al servidor actual...
+2026-08-28 13:06:33 │ INFO     │ ℹ️ Todos los animes pendientes siguen vigentes en el servidor.
+2026-08-28 13:06:33 │ INFO     │ Cantidad de animes extraídos: 7
+2026-08-28 13:06:33 │ INFO     │ {'nombre': 'Nige Jouzu no Wakagimi  2nd Season', 'episodio_actual': 6, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 7}
+2026-08-28 13:06:33 │ INFO     │ {'nombre': 'Honzuki no Gekokujou: Shisho ni Naru Tame ni wa Shudan wo Erandeiraremasen 4th Season', 'episodio_actual': 18, 'episodios_totales': 24, 'pendientes': 1, 'episodio_buscado': 19}
+2026-08-28 13:06:33 │ INFO     │ {'nombre': 'Kami no Shizuku', 'episodio_actual': 20, 'episodios_totales': 24, 'pendientes': 1, 'episodio_buscado': 21}
+2026-08-28 13:06:33 │ INFO     │ {'nombre': 'Kore Kaite Shine', 'episodio_actual': 7, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 8}
+2026-08-28 13:06:33 │ INFO     │ {'nombre': 'Uchi no Otouto-domo ga Sumimasen', 'episodio_actual': 8, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 9}
+2026-08-28 13:06:33 │ INFO     │ {'nombre': 'Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season', 'episodio_actual': 8, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 9}
+2026-08-28 13:06:33 │ INFO     │ {'nombre': 'Grow Up Show: Himawari no Circus-dan', 'episodio_actual': 6, 'episodios_totales': 12, 'pendientes': 2, 'episodio_buscado': 7}
+2026-08-28 13:06:33 │ INFO     │ Datos guardados en 'resultados_anime.txt'
+2026-08-28 13:06:33 │ INFO     │ 
+📺 Animes pendientes por procesar (7):
+2026-08-28 13:06:33 │ INFO     │    • {'nombre': 'Nige Jouzu no Wakagimi  2nd Season', 'episodio_actual': 6, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 7}
+2026-08-28 13:06:33 │ INFO     │    • {'nombre': 'Honzuki no Gekokujou: Shisho ni Naru Tame ni wa Shudan wo Erandeiraremasen 4th Season', 'episodio_actual': 18, 'episodios_totales': 24, 'pendientes': 1, 'episodio_buscado': 19}
+2026-08-28 13:06:33 │ INFO     │    • {'nombre': 'Kami no Shizuku', 'episodio_actual': 20, 'episodios_totales': 24, 'pendientes': 1, 'episodio_buscado': 21}
+2026-08-28 13:06:33 │ INFO     │    • {'nombre': 'Kore Kaite Shine', 'episodio_actual': 7, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 8}
+2026-08-28 13:06:33 │ INFO     │    • {'nombre': 'Uchi no Otouto-domo ga Sumimasen', 'episodio_actual': 8, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 9}
+2026-08-28 13:06:33 │ INFO     │    • {'nombre': 'Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season', 'episodio_actual': 8, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 9}
+2026-08-28 13:06:33 │ INFO     │    • {'nombre': 'Grow Up Show: Himawari no Circus-dan', 'episodio_actual': 6, 'episodios_totales': 12, 'pendientes': 2, 'episodio_buscado': 7}
+2026-08-28 13:06:33 │ INFO     │ ☁️ Conectando con Google Sheets para verificar el historial previo...
+2026-08-28 13:06:34 │ INFO     │ 📖 Se leyeron 28 registros previos desde Google Sheets.
+2026-08-28 13:06:34 │ INFO     │ ⏩ Omitiendo 'Nige Jouzu no Wakagimi  2nd Season' (Ep. 7): ya se encuentra registrado en Google Sheets.
+2026-08-28 13:06:34 │ INFO     │ ⏩ Omitiendo 'Kami no Shizuku' (Ep. 21): ya se encuentra registrado en Google Sheets.
+2026-08-28 13:06:34 │ INFO     │ ⏩ Omitiendo 'Kore Kaite Shine' (Ep. 8): ya se encuentra registrado en Google Sheets.
+2026-08-28 13:06:34 │ INFO     │ ⏩ Omitiendo 'Uchi no Otouto-domo ga Sumimasen' (Ep. 9): ya se encuentra registrado en Google Sheets.
+2026-08-28 13:06:34 │ INFO     │ Buscando videos relacionados...
+2026-08-28 13:06:35 │ INFO     │ 
+============================================================
+2026-08-28 13:06:35 │ INFO     │ 🔎 Buscando: Honzuki no Gekokujou: Shisho ni Naru Tame ni wa Shudan wo Erandeiraremasen 4th Season
+2026-08-28 13:06:35 │ INFO     │ 🎯 Episodio: 19
+2026-08-28 13:06:35 │ INFO     │ ============================================================
+2026-08-28 13:06:35 │ INFO     │ 🌐 Probando fuente: TioAnime
+2026-08-28 13:06:53 │ INFO     │ 
+--- INICIANDO PROCESO DE DESCARGA LOCAL ---
+2026-08-28 13:06:53 │ INFO     │ 
+☁️ Conectando con Google Sheets para leer animes pendientes...
+2026-08-28 13:06:54 │ INFO     │ 📖 Se leyeron 28 registros previos desde Google Sheets.
+2026-08-28 13:06:54 │ INFO     │ 
+Animes listos para descargar (4):
+2026-08-28 13:06:54 │ INFO     │ 1. Uchi no Otouto-domo ga Sumimasen - Ep: 9 [Pendiente]
+2026-08-28 13:06:54 │ INFO     │ 2. Nige Jouzu no Wakagimi  2nd Season - Ep: 7 [Pendiente]
+2026-08-28 13:06:54 │ INFO     │ 3. Kore Kaite Shine - Ep: 8 [Pendiente]
+2026-08-28 13:06:54 │ INFO     │ 4. Kami no Shizuku - Ep: 21 [Pendiente]
+2026-08-28 13:06:54 │ INFO     │ 
+Iniciando descargas automáticamente...
+2026-08-28 13:06:55 │ INFO     │ 
+============================================================
+2026-08-28 13:06:55 │ INFO     │ Descargando: Uchi no Otouto-domo ga Sumimasen - Episodio 9
+2026-08-28 13:06:55 │ INFO     │ ============================================================
+2026-08-28 13:06:55 │ INFO     │ 
+Intento 1/3
+2026-08-28 13:06:57 │ INFO     │ 
+🌐 Abriendo enlace de descarga para: Uchi no Otouto-domo ga Sumimasen
+2026-08-28 13:07:01 │ INFO     │ 🌐 Servidor detectado: mega
+2026-08-28 13:07:01 │ INFO     │ 🔍 Verificando estado del archivo en Mega...
+2026-08-28 13:07:03 │ INFO     │ 🖱️ Botón encontrado para servidor: mega
+2026-08-28 13:07:03 │ INFO     │ ⬇️ Descarga iniciada: Uchi no Otouto-domo ga Sumimasen
+2026-08-28 13:07:03 │ INFO     │ Esperando a que termine la descarga...
+2026-08-28 13:08:53 │ INFO     │ 📦 Archivo detectado: UchinoOtouto-domogaSumimasen_9_p7s3.mp4 | 160.18 MB | estable: 0s
+2026-08-28 13:08:55 │ INFO     │ 📦 Archivo detectado: UchinoOtouto-domogaSumimasen_9_p7s3.mp4 | 160.18 MB | estable: 2s
+2026-08-28 13:08:57 │ INFO     │ 📦 Archivo detectado: UchinoOtouto-domogaSumimasen_9_p7s3.mp4 | 160.18 MB | estable: 4s
+2026-08-28 13:08:59 │ INFO     │ 📦 Archivo detectado: UchinoOtouto-domogaSumimasen_9_p7s3.mp4 | 160.18 MB | estable: 6s
+2026-08-28 13:08:59 │ INFO     │ ✅ Descarga confirmada: UchinoOtouto-domogaSumimasen_9_p7s3.mp4
+2026-08-28 13:08:59 │ INFO     │ ✅ DESCARGA COMPLETADA: Uchi no Otouto-domo ga Sumimasen
+2026-08-28 13:08:59 │ INFO     │ 📁 Archivo: UchinoOtouto-domogaSumimasen_9_p7s3.mp4
+2026-08-28 13:08:59 │ INFO     │ ✅ Descarga completada: Uchi no Otouto-domo ga Sumimasen
+2026-08-28 13:09:02 │ INFO     │ 🔒 Driver cerrado.
+2026-08-28 13:09:02 │ INFO     │ ✅ Video descargado correctamente.
+2026-08-28 13:09:03 │ INFO     │ 🌐 Actualizando servidor mediante Selenium: Uchi no Otouto-domo ga Sumimasen - Ep 9 / https://inventarioncc.infinityfreeapp.com//Anime/Emision/actualizar.php?nombre_anime=Uchi no Otouto-domo ga Sumimasen&episodio=9
+2026-08-28 13:09:06 │ INFO     │ ✅ Servidor actualizado exitosamente.
+2026-08-28 13:09:11 │ INFO     │ ✅ Google Sheets actualizado: 'Uchi no Otouto-domo ga Sumimasen' (Ep. 9) -> 'Completado' [Fecha: 2026-08-28 13:09]
+2026-08-28 13:09:11 │ INFO     │ 
+============================================================
+2026-08-28 13:09:11 │ INFO     │ Descargando: Nige Jouzu no Wakagimi  2nd Season - Episodio 7
+2026-08-28 13:09:11 │ INFO     │ ============================================================
+2026-08-28 13:09:11 │ INFO     │ 
+Intento 1/3
+2026-08-28 13:09:12 │ INFO     │ 
+🌐 Abriendo enlace de descarga para: Nige Jouzu no Wakagimi  2nd Season
+2026-08-28 13:09:17 │ INFO     │ 🌐 Servidor detectado: mega
+2026-08-28 13:09:17 │ INFO     │ 🔍 Verificando estado del archivo en Mega...
+2026-08-28 13:09:19 │ INFO     │ 🖱️ Botón encontrado para servidor: mega
+2026-08-28 13:09:19 │ INFO     │ ⬇️ Descarga iniciada: Nige Jouzu no Wakagimi  2nd Season
+2026-08-28 13:09:19 │ INFO     │ Esperando a que termine la descarga...
+2026-08-28 13:09:45 │ INFO     │ 📦 Archivo detectado: NigeJouzunoWakagimi2ndSeason_7_OXn4.mp4 | 159.87 MB | estable: 0s
+2026-08-28 13:09:47 │ INFO     │ 📦 Archivo detectado: NigeJouzunoWakagimi2ndSeason_7_OXn4.mp4 | 159.87 MB | estable: 2s
+2026-08-28 13:09:49 │ INFO     │ 📦 Archivo detectado: NigeJouzunoWakagimi2ndSeason_7_OXn4.mp4 | 159.87 MB | estable: 4s
+2026-08-28 13:09:51 │ INFO     │ 📦 Archivo detectado: NigeJouzunoWakagimi2ndSeason_7_OXn4.mp4 | 159.87 MB | estable: 6s
+2026-08-28 13:09:51 │ INFO     │ ✅ Descarga confirmada: NigeJouzunoWakagimi2ndSeason_7_OXn4.mp4
+2026-08-28 13:09:51 │ INFO     │ ✅ DESCARGA COMPLETADA: Nige Jouzu no Wakagimi  2nd Season
+2026-08-28 13:09:51 │ INFO     │ 📁 Archivo: NigeJouzunoWakagimi2ndSeason_7_OXn4.mp4
+2026-08-28 13:09:51 │ INFO     │ ✅ Descarga completada: Nige Jouzu no Wakagimi  2nd Season
+2026-08-28 13:09:54 │ INFO     │ 🔒 Driver cerrado.
+2026-08-28 13:09:54 │ INFO     │ ✅ Video descargado correctamente.
+2026-08-28 13:09:54 │ INFO     │ 🌐 Actualizando servidor mediante Selenium: Nige Jouzu no Wakagimi  2nd Season - Ep 7 / https://inventarioncc.infinityfreeapp.com//Anime/Emision/actualizar.php?nombre_anime=Nige Jouzu no Wakagimi  2nd Season&episodio=7
+2026-08-28 13:09:57 │ INFO     │ ✅ Servidor actualizado exitosamente.
+2026-08-28 13:10:01 │ INFO     │ ✅ Google Sheets actualizado: 'Nige Jouzu no Wakagimi  2nd Season' (Ep. 7) -> 'Completado' [Fecha: 2026-08-28 13:09]
+2026-08-28 13:10:01 │ INFO     │ 
+============================================================
+2026-08-28 13:10:01 │ INFO     │ Descargando: Kore Kaite Shine - Episodio 8
+2026-08-28 13:10:01 │ INFO     │ ============================================================
+2026-08-28 13:10:01 │ INFO     │ 
+Intento 1/3
+2026-08-28 13:10:03 │ INFO     │ 
+🌐 Abriendo enlace de descarga para: Kore Kaite Shine
+2026-08-28 13:10:07 │ INFO     │ 🌐 Servidor detectado: mega
+2026-08-28 13:10:07 │ INFO     │ 🔍 Verificando estado del archivo en Mega...
+2026-08-28 13:10:09 │ INFO     │ 🖱️ Botón encontrado para servidor: mega
+2026-08-28 13:10:09 │ INFO     │ ⬇️ Descarga iniciada: Kore Kaite Shine
+2026-08-28 13:10:09 │ INFO     │ Esperando a que termine la descarga...
+2026-08-28 13:10:41 │ INFO     │ 📦 Archivo detectado: KoreKaiteShine_8_ME4u.mp4 | 159.42 MB | estable: 0s
+2026-08-28 13:10:43 │ INFO     │ 📦 Archivo detectado: KoreKaiteShine_8_ME4u.mp4 | 159.42 MB | estable: 2s
+2026-08-28 13:10:45 │ INFO     │ 📦 Archivo detectado: KoreKaiteShine_8_ME4u.mp4 | 159.42 MB | estable: 4s
+2026-08-28 13:10:47 │ INFO     │ 📦 Archivo detectado: KoreKaiteShine_8_ME4u.mp4 | 159.42 MB | estable: 6s
+2026-08-28 13:10:47 │ INFO     │ ✅ Descarga confirmada: KoreKaiteShine_8_ME4u.mp4
+2026-08-28 13:10:47 │ INFO     │ ✅ DESCARGA COMPLETADA: Kore Kaite Shine
+2026-08-28 13:10:47 │ INFO     │ 📁 Archivo: KoreKaiteShine_8_ME4u.mp4
+2026-08-28 13:10:47 │ INFO     │ ✅ Descarga completada: Kore Kaite Shine
+2026-08-28 13:10:50 │ INFO     │ 🔒 Driver cerrado.
+2026-08-28 13:10:50 │ INFO     │ ✅ Video descargado correctamente.
+2026-08-28 13:11:00 │ ERROR    │ ❌ Excepción al conectar con la API de Telegram: HTTPSConnectionPool(host='api.telegram.org', port=443): Max retries exceeded with url: /bot8707654578:AAGyPTGLTQRzkWgEL9-OmXaIq6FvWxBYXtk/sendMessage (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x000002D129995280>, 'Connection to api.telegram.org timed out. (connect timeout=10)'))
+2026-08-28 13:11:00 │ INFO     │ 🌐 Actualizando servidor mediante Selenium: Kore Kaite Shine - Ep 8 / https://inventarioncc.infinityfreeapp.com//Anime/Emision/actualizar.php?nombre_anime=Kore Kaite Shine&episodio=8
+2026-08-28 13:11:03 │ INFO     │ ✅ Servidor actualizado exitosamente.
+2026-08-28 13:11:08 │ INFO     │ ✅ Google Sheets actualizado: 'Kore Kaite Shine' (Ep. 8) -> 'Completado' [Fecha: 2026-08-28 13:11]
+2026-08-28 13:11:08 │ INFO     │ 
+============================================================
+2026-08-28 13:11:08 │ INFO     │ Descargando: Kami no Shizuku - Episodio 21
+2026-08-28 13:11:08 │ INFO     │ ============================================================
+2026-08-28 13:11:08 │ INFO     │ 
+Intento 1/3
+2026-08-28 13:11:09 │ INFO     │ 
+🌐 Abriendo enlace de descarga para: Kami no Shizuku
+2026-08-28 13:11:13 │ INFO     │ 🌐 Servidor detectado: mega
+2026-08-28 13:11:13 │ INFO     │ 🔍 Verificando estado del archivo en Mega...
+2026-08-28 13:11:16 │ INFO     │ 🖱️ Botón encontrado para servidor: mega
+2026-08-28 13:11:16 │ INFO     │ ⬇️ Descarga iniciada: Kami no Shizuku
+2026-08-28 13:11:16 │ INFO     │ Esperando a que termine la descarga...
+2026-08-28 13:14:26 │ INFO     │ 📦 Archivo detectado: KaminoShizuku_21_wZMU.mp4 | 160.07 MB | estable: 0s
+2026-08-28 13:14:28 │ INFO     │ 📦 Archivo detectado: KaminoShizuku_21_wZMU.mp4 | 160.07 MB | estable: 2s
+2026-08-28 13:14:30 │ INFO     │ 📦 Archivo detectado: KaminoShizuku_21_wZMU.mp4 | 160.07 MB | estable: 4s
+2026-08-28 13:14:32 │ INFO     │ 📦 Archivo detectado: KaminoShizuku_21_wZMU.mp4 | 160.07 MB | estable: 6s
+2026-08-28 13:14:32 │ INFO     │ ✅ Descarga confirmada: KaminoShizuku_21_wZMU.mp4
+2026-08-28 13:14:32 │ INFO     │ ✅ DESCARGA COMPLETADA: Kami no Shizuku
+2026-08-28 13:14:32 │ INFO     │ 📁 Archivo: KaminoShizuku_21_wZMU.mp4
+2026-08-28 13:14:32 │ INFO     │ ✅ Descarga completada: Kami no Shizuku
+2026-08-28 13:14:34 │ INFO     │ 🔒 Driver cerrado.
+2026-08-28 13:14:34 │ INFO     │ ✅ Video descargado correctamente.
+2026-08-28 13:14:35 │ INFO     │ 🌐 Actualizando servidor mediante Selenium: Kami no Shizuku - Ep 21 / https://inventarioncc.infinityfreeapp.com//Anime/Emision/actualizar.php?nombre_anime=Kami no Shizuku&episodio=21
+2026-08-28 13:14:40 │ INFO     │ ✅ Servidor actualizado exitosamente.
+2026-08-28 13:14:45 │ INFO     │ ✅ Google Sheets actualizado: 'Kami no Shizuku' (Ep. 21) -> 'Completado' [Fecha: 2026-08-28 13:14]
+2026-08-28 13:14:47 │ INFO     │ 🔒 Driver de servidor cerrado.
+2026-08-28 13:18:58 │ INFO     │ 📖 Se leyeron 28 registros previos desde Google Sheets.
+2026-08-28 13:18:58 │ INFO     │ 🔍 Verificando animes pendientes frente al servidor actual...
+2026-08-28 13:18:58 │ INFO     │ ℹ️ Todos los animes pendientes siguen vigentes en el servidor.
+2026-08-28 13:18:58 │ INFO     │ Cantidad de animes extraídos: 3
+2026-08-28 13:18:58 │ INFO     │ {'nombre': 'Honzuki no Gekokujou: Shisho ni Naru Tame ni wa Shudan wo Erandeiraremasen 4th Season', 'episodio_actual': 18, 'episodios_totales': 24, 'pendientes': 1, 'episodio_buscado': 19}
+2026-08-28 13:18:58 │ INFO     │ {'nombre': 'Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season', 'episodio_actual': 8, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 9}
+2026-08-28 13:18:58 │ INFO     │ {'nombre': 'Grow Up Show: Himawari no Circus-dan', 'episodio_actual': 6, 'episodios_totales': 12, 'pendientes': 2, 'episodio_buscado': 7}
+2026-08-28 13:18:58 │ INFO     │ Datos guardados en 'resultados_anime.txt'
+2026-08-28 13:18:58 │ INFO     │ 
+📺 Animes pendientes por procesar (3):
+2026-08-28 13:18:58 │ INFO     │    • {'nombre': 'Honzuki no Gekokujou: Shisho ni Naru Tame ni wa Shudan wo Erandeiraremasen 4th Season', 'episodio_actual': 18, 'episodios_totales': 24, 'pendientes': 1, 'episodio_buscado': 19}
+2026-08-28 13:18:58 │ INFO     │    • {'nombre': 'Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season', 'episodio_actual': 8, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 9}
+2026-08-28 13:18:58 │ INFO     │    • {'nombre': 'Grow Up Show: Himawari no Circus-dan', 'episodio_actual': 6, 'episodios_totales': 12, 'pendientes': 2, 'episodio_buscado': 7}
+2026-08-28 13:18:58 │ INFO     │ ☁️ Conectando con Google Sheets para verificar el historial previo...
+2026-08-28 13:19:00 │ INFO     │ 📖 Se leyeron 28 registros previos desde Google Sheets.
+2026-08-28 13:19:00 │ INFO     │ Buscando videos relacionados...
+2026-08-28 13:19:01 │ INFO     │ 
+============================================================
+2026-08-28 13:19:01 │ INFO     │ 🔎 Buscando: Honzuki no Gekokujou: Shisho ni Naru Tame ni wa Shudan wo Erandeiraremasen 4th Season
+2026-08-28 13:19:01 │ INFO     │ 🎯 Episodio: 19
+2026-08-28 13:19:01 │ INFO     │ ============================================================
+2026-08-28 13:19:01 │ INFO     │ 🌐 Probando fuente: TioAnime
+2026-08-28 13:19:17 │ INFO     │ ✅ Encontrado en TioAnime
+2026-08-28 13:19:21 │ INFO     │ 
+============================================================
+2026-08-28 13:19:21 │ INFO     │ 🔎 Buscando: Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season
+2026-08-28 13:19:21 │ INFO     │ 🎯 Episodio: 9
+2026-08-28 13:19:21 │ INFO     │ ============================================================
+2026-08-28 13:19:21 │ INFO     │ 🌐 Probando fuente: TioAnime
+2026-08-28 13:19:47 │ ERROR    │ ❌ TioAnime: episodio no encontrado.
+2026-08-28 13:19:50 │ ERROR    │ ❌ No se encontró Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season episodio 9
+2026-08-28 13:19:51 │ INFO     │ 
+============================================================
+2026-08-28 13:19:51 │ INFO     │ 🔎 Buscando: Grow Up Show: Himawari no Circus-dan
+2026-08-28 13:19:51 │ INFO     │ 🎯 Episodio: 7
+2026-08-28 13:19:51 │ INFO     │ ============================================================
+2026-08-28 13:19:51 │ INFO     │ 🌐 Probando fuente: TioAnime
+2026-08-28 13:20:17 │ INFO     │ ✅ Encontrado en TioAnime
+2026-08-28 13:20:22 │ WARNING  │ Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000002D129E4FE60>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión')': /session/16edbf22557de210f5579c390348c843
+2026-08-28 13:20:26 │ WARNING  │ Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000002D129E4FB60>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión')': /session/16edbf22557de210f5579c390348c843
+2026-08-28 13:20:30 │ WARNING  │ Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000002D129E4F980>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión')': /session/16edbf22557de210f5579c390348c843
+2026-08-28 13:20:39 │ INFO     │ 
+============================================================
+2026-08-28 13:20:39 │ INFO     │ 🔎 Buscando: Grow Up Show: Himawari no Circus-dan
+2026-08-28 13:20:39 │ INFO     │ 🎯 Episodio: 8
+2026-08-28 13:20:39 │ INFO     │ ============================================================
+2026-08-28 13:20:39 │ INFO     │ 🌐 Probando fuente: TioAnime
+2026-08-28 13:21:22 │ ERROR    │ ❌ TioAnime: episodio no encontrado.
+2026-08-28 13:21:24 │ ERROR    │ ❌ No se encontró Grow Up Show: Himawari no Circus-dan episodio 8
+2026-08-28 13:21:39 │ INFO     │ 
+🔎 Validando estado de los enlaces en Mega...
+2026-08-28 13:21:46 │ ERROR    │ ❌ Enlace caído o con cuota en Mega para Honzuki no Gekokujou: Shisho ni Naru Tame ni wa Shudan wo Erandeiraremasen 4th Season Episodio 19. Buscando en otra fuente...
+2026-08-28 13:21:51 │ ERROR    │ ❌ Enlace caído o con cuota en Mega para Grow Up Show: Himawari no Circus-dan Episodio 7. Buscando en otra fuente...
+2026-08-28 13:21:54 │ INFO     │ 🔒 Driver de búsqueda cerrado.
+2026-08-28 13:21:54 │ ERROR    │ ❌ No se encontraron videos finales válidos para guardar.
+2026-08-28 13:24:38 │ INFO     │ 📖 Se leyeron 28 registros previos desde Google Sheets.
+2026-08-28 13:24:38 │ INFO     │ 🔍 Verificando animes pendientes frente al servidor actual...
+2026-08-28 13:24:38 │ INFO     │ ℹ️ Todos los animes pendientes siguen vigentes en el servidor.
+2026-08-28 13:24:38 │ INFO     │ Cantidad de animes extraídos: 3
+2026-08-28 13:24:38 │ INFO     │ {'nombre': 'Honzuki no Gekokujou: Shisho ni Naru Tame ni wa Shudan wo Erandeiraremasen 4th Season', 'episodio_actual': 18, 'episodios_totales': 24, 'pendientes': 1, 'episodio_buscado': 19}
+2026-08-28 13:24:38 │ INFO     │ {'nombre': 'Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season', 'episodio_actual': 8, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 9}
+2026-08-28 13:24:38 │ INFO     │ {'nombre': 'Grow Up Show: Himawari no Circus-dan', 'episodio_actual': 6, 'episodios_totales': 12, 'pendientes': 2, 'episodio_buscado': 7}
+2026-08-28 13:24:38 │ INFO     │ Datos guardados en 'resultados_anime.txt'
+2026-08-28 13:24:38 │ INFO     │ 
+📺 Animes pendientes por procesar (3):
+2026-08-28 13:24:38 │ INFO     │    • {'nombre': 'Honzuki no Gekokujou: Shisho ni Naru Tame ni wa Shudan wo Erandeiraremasen 4th Season', 'episodio_actual': 18, 'episodios_totales': 24, 'pendientes': 1, 'episodio_buscado': 19}
+2026-08-28 13:24:38 │ INFO     │    • {'nombre': 'Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season', 'episodio_actual': 8, 'episodios_totales': 12, 'pendientes': 1, 'episodio_buscado': 9}
+2026-08-28 13:24:38 │ INFO     │    • {'nombre': 'Grow Up Show: Himawari no Circus-dan', 'episodio_actual': 6, 'episodios_totales': 12, 'pendientes': 2, 'episodio_buscado': 7}
+2026-08-28 13:24:38 │ INFO     │ ☁️ Conectando con Google Sheets para verificar el historial previo...
+2026-08-28 13:24:40 │ INFO     │ 📖 Se leyeron 28 registros previos desde Google Sheets.
+2026-08-28 13:24:40 │ INFO     │ Buscando videos relacionados...
+2026-08-28 13:24:41 │ INFO     │ 
+============================================================
+2026-08-28 13:24:41 │ INFO     │ 🔎 Buscando: Honzuki no Gekokujou: Shisho ni Naru Tame ni wa Shudan wo Erandeiraremasen 4th Season
+2026-08-28 13:24:41 │ INFO     │ 🎯 Episodio: 19
+2026-08-28 13:24:41 │ INFO     │ ============================================================
+2026-08-28 13:24:41 │ INFO     │ 🌐 Probando fuente: TioAnime
+2026-08-28 13:25:50 │ INFO     │ ✅ Encontrado en TioAnime
+2026-08-28 13:25:54 │ INFO     │ 
+============================================================
+2026-08-28 13:25:54 │ INFO     │ 🔎 Buscando: Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season
+2026-08-28 13:25:54 │ INFO     │ 🎯 Episodio: 9
+2026-08-28 13:25:54 │ INFO     │ ============================================================
+2026-08-28 13:25:54 │ INFO     │ 🌐 Probando fuente: TioAnime
+2026-08-28 13:26:18 │ ERROR    │ ❌ TioAnime: episodio no encontrado.
+2026-08-28 13:26:20 │ ERROR    │ ❌ No se encontró Hell Mode: Yarikomizuki no Gamer wa Hai Settei no Isekai de Musou suru 2nd Season episodio 9
+2026-08-28 13:26:22 │ INFO     │ 
+============================================================
+2026-08-28 13:26:22 │ INFO     │ 🔎 Buscando: Grow Up Show: Himawari no Circus-dan
+2026-08-28 13:26:22 │ INFO     │ 🎯 Episodio: 7
+2026-08-28 13:26:22 │ INFO     │ ============================================================
+2026-08-28 13:26:22 │ INFO     │ 🌐 Probando fuente: TioAnime
+2026-08-28 13:26:57 │ INFO     │ ✅ Encontrado en TioAnime
+2026-08-28 13:27:01 │ WARNING  │ Retrying (Retry(total=2, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000001C11BD8E240>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión')': /session/ed91c2c30a04df0d301d325b95ddf197
+2026-08-28 13:27:05 │ WARNING  │ Retrying (Retry(total=1, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000001C11BE3F830>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión')': /session/ed91c2c30a04df0d301d325b95ddf197
+2026-08-28 13:27:09 │ WARNING  │ Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000001C11BE3F620>: Failed to establish a new connection: [WinError 10061] No se puede establecer una conexión ya que el equipo de destino denegó expresamente dicha conexión')': /session/ed91c2c30a04df0d301d325b95ddf197
+2026-08-28 13:27:19 │ INFO     │ 
+============================================================
+2026-08-28 13:27:19 │ INFO     │ 🔎 Buscando: Grow Up Show: Himawari no Circus-dan
+2026-08-28 13:27:19 │ INFO     │ 🎯 Episodio: 8
+2026-08-28 13:27:19 │ INFO     │ ============================================================
+2026-08-28 13:27:19 │ INFO     │ 🌐 Probando fuente: TioAnime
+2026-08-28 13:27:30 │ INFO     │ ✅ Encontrado en TioAnime
+2026-08-28 13:27:56 │ INFO     │ 
+🔎 Validando estado de los enlaces en Mega...
+2026-08-28 13:28:03 │ ERROR    │ ❌ Enlace caído o con cuota en Mega para Honzuki no Gekokujou: Shisho ni Naru Tame ni wa Shudan wo Erandeiraremasen 4th Season Episodio 19. Buscando en otra fuente...
+2026-08-28 13:28:08 │ ERROR    │ ❌ Enlace caído o con cuota en Mega para Grow Up Show: Himawari no Circus-dan Episodio 7. Buscando en otra fuente...
+2026-08-28 13:28:14 │ ERROR    │ ❌ Enlace caído o con cuota en Mega para Grow Up Show: Himawari no Circus-dan Episodio 8. Buscando en otra fuente...
+2026-08-28 13:28:17 │ INFO     │ 🔒 Driver de búsqueda cerrado.
+2026-08-28 13:28:17 │ ERROR    │ ❌ No se encontraron videos finales válidos para guardar.
+2026-08-28 13:28:22 │ INFO     │ 📊 ¡Historial actualizado en la parte SUPERIOR de la hoja!

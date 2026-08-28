@@ -12,7 +12,7 @@ from animes.comparador import (
 from utilidades.archivos import guardar_resultados_animes_txt, guardar_archivos_descargados, guardar_animes_no_descargados, leer_nombres_animes_a_descargar, mover_videos_y_limpiar_carpetas, eliminar_txt, guardar_resultados_animes_json
 from animes.comparador import obtener_archivos_descargados, comparar_descargas
 from download.descargar import flujo_descarga_animes , proceso_local_descargar_archivos
-from base_excel import obtener_conexion_google_sheets, leer_animes_pendientes, verificar_animes_desaparecidos
+from base_excel import obtener_conexion_google_sheets, leer_animes_pendientes, verificar_animes_desaparecidos,guardar_logs_en_sheets
 
 def procesar_animes(
     download_dir,
@@ -250,6 +250,8 @@ def menu():
             continuar_descarga = flujo_descarga_animes(
                 archivo_resultado_no_descargados, download_dir
             )
+            
+            guardar_logs_en_sheets(sheet_service)
 
             if continuar_descarga is False:
                 eliminar_txt()
