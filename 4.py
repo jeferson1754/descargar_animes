@@ -197,7 +197,8 @@ def menu():
         return menu()
 
     accion = resultado_menu.get("accion")
-
+    opcion = str(resultado_menu.get("opcion", ""))  # Convertimos a string por seguridad
+    
     # Si la opción elegida fue la descarga local directa desde Google Sheets (Opción 4)
     if accion == "menu_continuar":
         print("\nVolviendo al menú principal...")
@@ -220,8 +221,9 @@ def menu():
         if sheet_service:
             animes_previos_sheets = leer_animes_pendientes(sheet_service)
         
-            # 3. EJECUTAR LA VALIDACIÓN: Marcar como completados los que ya no salgan en la web
-            verificar_animes_desaparecidos(sheet_service, animes_previos_sheets, nombres_anime)
+           # 3. EJECUTAR LA VALIDACIÓN: Marcar como completados los que ya no salgan en la web (Solo si es Opción 2)
+            if opcion == "2":
+                verificar_animes_desaparecidos(sheet_service, animes_previos_sheets, nombres_anime)
 
         archivo_animes = "resultados_anime.txt"
         archivo_resultado_descargados = "archivos_descargados.txt"
