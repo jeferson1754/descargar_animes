@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 import requests
 from urllib.parse import urljoin
 import time
+import logging
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -17,7 +18,7 @@ URL_TIOANIME = "https://tioanime.com/"
 
 def buscar_y_obtener_url_anime(driver, nombre_anime):
     try:
-        print(f"🔍 Buscando en la web de TioAnime: {nombre_anime}")
+        logging.info(f"🔍 Buscando en la web de TioAnime: {nombre_anime}")
         driver.get("https://tioanime.com/")
 
         wait = WebDriverWait(driver, 10)
@@ -43,7 +44,7 @@ def buscar_y_obtener_url_anime(driver, nombre_anime):
 
         try:
             # 4. Intentar capturar el primer resultado del desplegable dinámico
-            print("⏳ Buscando en el menú desplegable...")
+            logging.info("⏳ Buscando en el menú desplegable...")
             primer_resultado = wait.until(
                 EC.presence_of_element_located(
                     (By.CSS_SELECTOR, "div#search-results a.anime, div#search-results a"))
@@ -51,10 +52,10 @@ def buscar_y_obtener_url_anime(driver, nombre_anime):
             href_relativo = primer_resultado.get_attribute("href")
 
             if href_relativo and "javascript" not in href_relativo and "#" not in href_relativo:
-                print(f"✅ ¡Encontrado en el desplegable! URL: {href_relativo}")
+                logging.info(f"✅ ¡Encontrado en el desplegable! URL: {href_relativo}")
                 return href_relativo
         except:
-            print(
+            logging.warning(
                 "⚠️ El menú desplegable no respondió. Enviando tecla ENTER por seguridad...")
 
         # 5. Respaldo por ENTER si el desplegable falla
@@ -67,11 +68,11 @@ def buscar_y_obtener_url_anime(driver, nombre_anime):
         )
         href_relativo = primer_resultado_directorio.get_attribute("href")
 
-        print(f"✅ ¡Encontrado por redirección! URL: {href_relativo}")
+        logging.info(f"✅ ¡Encontrado por redirección! URL: {href_relativo}")
         return href_relativo
 
     except Exception as e:
-        print(
+        logging.error(
             f"❌ No se pudo encontrar el anime '{nombre_anime}' de ninguna forma: {e}")
         return None
 
@@ -110,16 +111,16 @@ if __name__ == "__main__":
             nombre_anime = anime['nombre']
             episodio_buscado = anime['episodio_buscado']
 
-            print(f"\n============================================================")
-            print(
+            logging.info(f"\n============================================================")
+            logging.info(
                 f"🔎 Procesando: {nombre_anime} | Episodio: {episodio_buscado}")
-            print(f"============================================================")
+            logging.info(f"============================================================")
 
             # 1. Buscamos y obtenemos la URL general del anime
             enlace_anime = buscar_y_obtener_url_anime(driver, nombre_anime)
 
             if enlace_anime:
-                print(f"🌐 URL obtenida: {enlace_anime}")
+                logging.info(f"🌐 URL obtenida: {enlace_anime}")
 
                 # ---------------------------------------------------------
                 # AQUÍ LLAMARÁS A TU FUNCIÓN QUE ENTRA A LA URL DEL ANIME,
@@ -128,13 +129,13 @@ if __name__ == "__main__":
                 # ---------------------------------------------------------
 
             else:
-                print(
+                logging.error(
                     f"❌ No se pudo procesar {nombre_anime} porque no se encontró la URL.")
 
     finally:
         # Aseguramos que el navegador se cierre al terminar todos los procesos
         try:
             driver.quit()
-            print("\n🔒 Driver cerrado correctamente.")
+            logging.info("\n🔒 Driver cerrado correctamente.")
         except Exception as e:
-            print(f"⚠️ Error al cerrar el driver: {e}")
+            logging.info(f"⚠️ Error al cerrar el driver: {e}")

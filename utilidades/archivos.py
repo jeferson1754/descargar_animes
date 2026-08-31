@@ -3,7 +3,7 @@ import json
 import re
 import os
 import shutil
-
+import logging
 
 def guardar_resultados_animes_txt(animes, filename):
     """
@@ -54,7 +54,7 @@ def guardar_resultados_animes_txt(animes, filename):
                     "-" * 50 + "\n"
                 )
 
-        print(
+        logging.info(
             f"✅ Resultados guardados en: {filename}"
         )
 
@@ -62,7 +62,7 @@ def guardar_resultados_animes_txt(animes, filename):
 
     except Exception as e:
 
-        print(
+        logging.error(
             f"❌ Error guardando resultados: {e}"
         )
 
@@ -84,11 +84,11 @@ def leer_nombres_y_enlaces_desde_txt(filename):
             videos.append(
                 {'nombre': nombre, 'link_video': enlace_video, 'link_descarga': enlace_descarga})
 
-        print(f"Videos leídos desde el archivo: {videos}")
+        logging.info(f"Videos leídos desde el archivo: {videos}")
         return videos
 
     except FileNotFoundError:
-        print(f"El archivo '{filename}' no fue encontrado.")
+        logging.info(f"El archivo '{filename}' no fue encontrado.")
         return []
 
 
@@ -130,7 +130,7 @@ def guardar_animes_no_descargados(
                 indent=4
             )
 
-        print(
+        logging.info(
             f"✅ Animes pendientes guardados en:\n"
             f"{archivo_salida}"
         )
@@ -139,7 +139,7 @@ def guardar_animes_no_descargados(
 
     except Exception as e:
 
-        print(
+        logging.error(
             f"❌ Error al guardar los animes pendientes: {e}"
         )
 
@@ -171,7 +171,7 @@ def leer_nombres_desde_txt(filename):
             animes = json.load(file)
 
         if not isinstance(animes, list):
-            print(
+            logging.error(
                 f"❌ El archivo '{filename}' "
                 "no contiene una lista de animes."
             )
@@ -180,20 +180,20 @@ def leer_nombres_desde_txt(filename):
         return animes
 
     except FileNotFoundError:
-        print(
+        logging.error(
             f"❌ El archivo '{filename}' "
             "no fue encontrado."
         )
         return []
 
     except json.JSONDecodeError as e:
-        print(
+        logging.error(
             f"❌ Error leyendo el JSON '{filename}': {e}"
         )
         return []
 
     except Exception as e:
-        print(
+        logging.error(
             f"❌ Error leyendo '{filename}': {e}"
         )
         return []
@@ -240,7 +240,7 @@ def crear_directorio(directorio):
     if not os.path.exists(directorio):
         os.makedirs(directorio)
 
-        print(
+        logging.info(
             f"📁 Directorio creado: {directorio}"
         )
 
@@ -281,7 +281,7 @@ def leer_txt(filename):
 
     except FileNotFoundError:
 
-        print(
+        logging.warning(
             f"⚠️ No existe el archivo: {filename}"
         )
 
@@ -311,7 +311,7 @@ def escribir_txt(filename, datos):
 
     except Exception as e:
 
-        print(
+        logging.error(
             f"❌ Error escribiendo {filename}: {e}"
         )
 
@@ -339,7 +339,7 @@ def agregar_txt(filename, texto):
 
     except Exception as e:
 
-        print(
+        logging.error(
             f"❌ Error agregando al archivo: {e}"
         )
 
@@ -445,7 +445,7 @@ def mover_archivo(origen, destino):
             destino
         )
 
-        print(
+        logging.info(
             f"📦 Movido: {origen} → {destino}"
         )
 
@@ -453,7 +453,7 @@ def mover_archivo(origen, destino):
 
     except Exception as e:
 
-        print(
+        logging.error(
             f"❌ Error moviendo archivo: {e}"
         )
 
@@ -511,7 +511,7 @@ def mover_videos(
             # Evitar sobrescribir
             if os.path.exists(destino):
 
-                print(
+                logging.warning(
                     f"⚠️ Ya existe: {archivo}"
                 )
 
@@ -557,13 +557,13 @@ def eliminar_carpetas_vacias(
 
                 os.rmdir(root)
 
-                print(
+                logging.info(
                     f"🗑️ Carpeta eliminada: {root}"
                 )
 
             except OSError as e:
 
-                print(
+                logging.warning(
                     f"⚠️ No se pudo eliminar "
                     f"{root}: {e}"
                 )
@@ -613,7 +613,7 @@ def guardar_resultados_animes_json(animes, filename):
                 indent=4
             )
 
-        print(
+        logging.info(
             f"✅ Animes guardados en: {filename}"
         )
 
@@ -621,7 +621,7 @@ def guardar_resultados_animes_json(animes, filename):
 
     except Exception as e:
 
-        print(
+        logging.error(
             f"❌ Error guardando JSON: {e}"
         )
 
@@ -650,7 +650,7 @@ def leer_nombres_animes_a_descargar(archivo_animes):
 
         if not isinstance(animes, list):
 
-            print(
+            logging.error(
                 "❌ El archivo no contiene "
                 "una lista válida de animes."
             )
@@ -661,7 +661,7 @@ def leer_nombres_animes_a_descargar(archivo_animes):
 
     except FileNotFoundError:
 
-        print(
+        logging.error(
             f"❌ No se encontró el archivo: "
             f"{archivo_animes}"
         )
@@ -670,7 +670,7 @@ def leer_nombres_animes_a_descargar(archivo_animes):
 
     except json.JSONDecodeError as e:
 
-        print(
+        logging.error(
             f"❌ El JSON tiene un formato inválido: "
             f"{e}"
         )
@@ -679,7 +679,7 @@ def leer_nombres_animes_a_descargar(archivo_animes):
 
     except Exception as e:
 
-        print(
+        logging.error(
             f"❌ Error leyendo animes: {e}"
         )
 
@@ -697,7 +697,7 @@ def mover_videos_y_limpiar_carpetas(directorio_origen, directorio_destino):
         os.makedirs(directorio_destino)
 
     # 1. Mover los archivos
-    print("--- Moviendo archivos ---")
+    logging.info("--- Moviendo archivos ---")
     for root, dirs, files in os.walk(directorio_origen):
         # Evitar procesar el mismo directorio destino si está dentro del origen
         if os.path.abspath(root) == os.path.abspath(directorio_destino):
@@ -710,13 +710,13 @@ def mover_videos_y_limpiar_carpetas(directorio_origen, directorio_destino):
 
                 if not os.path.exists(destino):
                     shutil.move(origen, destino)
-                    print(f"✅ Movido: {file}")
+                    logging.info(f"✅ Movido: {file}")
                 else:
-                    print(f"⚠️ Ya existe: {file}")
+                    logging.warning(f"⚠️ Ya existe: {file}")
 
     # 2. Eliminar carpetas vacías
     # Usamos topdown=False para eliminar subcarpetas antes que la carpeta padre
-    print("\n--- Limpiando carpetas vacías ---")
+    logging.info("\n--- Limpiando carpetas vacías ---")
     for root, dirs, files in os.walk(directorio_origen, topdown=False):
         # No borrar el directorio raíz de origen ni el directorio destino
         if os.path.abspath(root) == os.path.abspath(directorio_origen):
@@ -728,11 +728,11 @@ def mover_videos_y_limpiar_carpetas(directorio_origen, directorio_destino):
         if not os.listdir(root):
             try:
                 os.rmdir(root)
-                print(f"🗑️ Carpeta eliminada: {root}")
+                logging.info(f"🗑️ Carpeta eliminada: {root}")
             except OSError as e:
-                print(f"❌ No se pudo borrar {root}: {e}")
+                logging.error(f"❌ No se pudo borrar {root}: {e}")
 
-    print("\nProceso completado.")
+    logging.info("\nProceso completado.")
 
 
 def eliminar_txt():
@@ -742,12 +742,12 @@ def eliminar_txt():
         '.') if archivo.endswith('.txt') and archivo != 'requirements.txt']
 
     if not archivos_txt:
-        print("No se encontraron archivos TXT en la carpeta actual (excepto 'requirements.txt').")
+        logging.warning("No se encontraron archivos TXT en la carpeta actual (excepto 'requirements.txt').")
         return
 
-    print("Se encontraron los siguientes TXT (excepto 'requirements.txt'):")
+    logging.warning("Se encontraron los siguientes TXT (excepto 'requirements.txt'):")
     for archivo in archivos_txt:
-        print(archivo)
+        logging.info(archivo)
 
     confirmar = input(
         "¿Estás seguro de que deseas eliminar estos archivos? (Presiona Enter para confirmar): ")
@@ -756,11 +756,11 @@ def eliminar_txt():
         for archivo in archivos_txt:
             try:
                 os.remove(archivo)
-                print(f"Eliminado: {archivo}")
+                logging.info(f"Eliminado: {archivo}")
             except Exception as e:
-                print(f"No se pudo eliminar {archivo}: {e}")
+                logging.info(f"No se pudo eliminar {archivo}: {e}")
     else:
-        print("Eliminación cancelada.")
+        logging.info("Eliminación cancelada.")
 
 
 def extraer_episodio_archivo(nombre_archivo):

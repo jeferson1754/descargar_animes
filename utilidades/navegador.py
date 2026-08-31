@@ -1,5 +1,6 @@
 from selenium import webdriver
 import os
+import logging
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -50,7 +51,7 @@ def configurar_navegador(download_dir):
         # Selenium Manager
         # -----------------------------------------
 
-        print(
+        logging.info(
             "🌐 Iniciando Chrome mediante Selenium Manager..."
         )
 
@@ -58,7 +59,7 @@ def configurar_navegador(download_dir):
             options=options
         )
 
-        print(
+        logging.info(
             "✅ Chrome iniciado correctamente."
         )
 
@@ -66,7 +67,7 @@ def configurar_navegador(download_dir):
 
     except Exception as e:
 
-        print(
+        logging.error(
             f"❌ No se pudo iniciar Chrome: {e}"
         )
 
@@ -78,7 +79,7 @@ def configurar_navegador_inteligente(download_dir):
     # Detectar versión de Chrome
     version_chrome = obtener_version_chrome()
     if version_chrome:
-        print(f"Chrome detectado: versión {version_chrome}")
+        logging.info(f"Chrome detectado: versión {version_chrome}")
         version_major = version_chrome.split('.')[0]
 
         # Mapear versiones principales a ChromeDriver compatibles
@@ -92,9 +93,9 @@ def configurar_navegador_inteligente(download_dir):
 
         versiones_compatibles = version_map.get(
             version_major, ["136.0.7103.114"])
-        print(f"Versiones de ChromeDriver a probar: {versiones_compatibles}")
+        logging.info(f"Versiones de ChromeDriver a probar: {versiones_compatibles}")
     else:
-        print("No se pudo detectar Chrome, usando versiones por defecto")
+        logging.info("No se pudo detectar Chrome, usando versiones por defecto")
         versiones_compatibles = ["136.0.7103.114", "135.0.7035.122"]
 
     chrome_options = webdriver.ChromeOptions()
@@ -117,14 +118,14 @@ def configurar_navegador_inteligente(download_dir):
     # Probar versiones compatibles
     for version in versiones_compatibles:
         try:
-            print(f"Probando ChromeDriver {version}...")
+            logging.info(f"Probando ChromeDriver {version}...")
             driver_path = ChromeDriverManager(driver_version=version).install()
             service = Service(driver_path)
             driver = webdriver.Chrome(service=service, options=chrome_options)
-            print(f"✓ Éxito con ChromeDriver {version}")
+            logging.info(f"✓ Éxito con ChromeDriver {version}")
             return driver
         except Exception as e:
-            print(f"✗ Falló ChromeDriver {version}")
+            logging.error(f"✗ Falló ChromeDriver {version}")
             continue
 
     # Fallback
@@ -158,6 +159,6 @@ def obtener_version_chrome():
                 return version
 
     except Exception as e:
-        print(f"No se pudo detectar la versión de Chrome: {e}")
+        logging.warning(f"No se pudo detectar la versión de Chrome: {e}")
 
     return None

@@ -2,6 +2,7 @@ import requests
 import time
 from bs4 import BeautifulSoup
 import re
+import logging
 import unicodedata
 from urllib.parse import urljoin
 import difflib
@@ -61,14 +62,14 @@ def buscar_pagina_principal(url, anime, max_intentos=3):
 
             intentos += 1
 
-            print(
+            logging.warning(
                 f"⚠️ Error al conectar con la página "
                 f"(Intento {intentos}/{max_intentos}): {e}"
             )
 
             if intentos < max_intentos:
 
-                print(
+                logging.info(
                     "🔄 Reintentando en 3 segundos..."
                 )
 
@@ -76,7 +77,7 @@ def buscar_pagina_principal(url, anime, max_intentos=3):
 
             else:
 
-                print(
+                logging.error(
                     "❌ Se agotaron los reintentos."
                 )
 
@@ -160,20 +161,20 @@ def buscar_pagina_principal(url, anime, max_intentos=3):
             episodio_buscado = anime.get("episodio_buscado")
 
             if episodio is None:
-                print(
+                logging.warning(
                     f"⚠️ No se pudo determinar el episodio de: "
                     f"{url_completa}"
                 )
                 continue
 
             if episodio != episodio_buscado:
-                print(
+                logging.info(
                     f"⏭️ Episodio incorrecto: {episodio}. "
                     f"Se necesita el episodio {episodio_buscado}."
                 )
                 continue
 
-            print(
+            logging.info(
                 f"✅ Episodio correcto encontrado: "
                 f"{episodio_buscado}"
             )
@@ -205,7 +206,7 @@ def buscar_pagina_principal(url, anime, max_intentos=3):
 
     except Exception as e:
 
-        print(
+        logging.error(
             f"❌ Error al procesar el contenido HTML: {e}"
         )
 
@@ -217,7 +218,7 @@ def buscar_videos_tioanime(driver, url, animes):
     """
     Coordina la búsqueda en TioAnime.
     """
-    print(f"🔍 Buscando videos en: {url}")
+    logging.info(f"🔍 Buscando videos en: {url}")
 
     resultados = []
 
@@ -226,10 +227,10 @@ def buscar_videos_tioanime(driver, url, animes):
         nombre = anime["nombre"]
         episodio_buscado = anime.get("episodio_buscado")
 
-        print("\n" + "=" * 60)
-        print(f"📺 Anime: {nombre}")
-        print(f"🎯 Episodio buscado: {episodio_buscado}")
-        print("=" * 60)
+        logging.info("\n" + "=" * 60)
+        logging.info(f"📺 Anime: {nombre}")
+        logging.info(f"🎯 Episodio buscado: {episodio_buscado}")
+        logging.info("=" * 60)
 
 
         # ---------------------------------------------
@@ -246,7 +247,7 @@ def buscar_videos_tioanime(driver, url, animes):
             resultados.extend(resultado)
             continue
 
-        print(
+        logging.info(
             "ℹ️ No encontrado en página principal."
         )
         
@@ -265,7 +266,7 @@ def buscar_videos_tioanime(driver, url, animes):
 
         if not ultimo:
 
-            print(
+            logging.error(
                 f"❌ No se pudieron obtener episodios "
                 f"de {nombre}"
             )
@@ -274,7 +275,7 @@ def buscar_videos_tioanime(driver, url, animes):
 
         ultimo_episodio = ultimo["episodio"]
 
-        print(
+        logging.info(
             f"📊 Último disponible: "
             f"{ultimo_episodio} | "
             f"Buscado: {episodio_buscado}"
@@ -291,7 +292,7 @@ def buscar_videos_tioanime(driver, url, animes):
             and ultimo_episodio < episodio_buscado
         ):
 
-            print(
+            logging.info(
                 f"⏳ Todavía no salió el episodio "
                 f"{episodio_buscado}."
             )
@@ -319,7 +320,7 @@ def buscar_videos_tioanime(driver, url, animes):
                 resultado_anime
             )
 
-            print(
+            logging.info(
                 f"✅ Episodio {episodio_buscado} "
                 f"encontrado."
             )
@@ -332,7 +333,7 @@ def buscar_videos_tioanime(driver, url, animes):
 
         if ultimo_episodio > episodio_buscado:
 
-            print(
+            logging.info(
                 f"ℹ️ El último episodio disponible "
                 f"es {ultimo_episodio}, "
                 f"pero se busca {episodio_buscado}. Buscando enlace específico..."
@@ -357,12 +358,12 @@ def buscar_videos_tioanime(driver, url, animes):
                     resultado_anime
                 )
 
-                print(
+                logging.info(
                     f"✅ Episodio específico {episodio_buscado} "
                     f"encontrado y agregado."
                 )
             else:
-                print(
+                logging.error(
                     f"❌ No se pudo encontrar el enlace "
                     f"para el episodio {episodio_buscado}."
                 )
@@ -377,10 +378,10 @@ def buscar_videos_tioanime(driver, url, animes):
 def obtener_ultimo_episodio(driver, url_anime, max_intentos=3):
 
     if not url_anime:
-        print("❌ URL del anime vacía.")
+        logging.error("❌ URL del anime vacía.")
         return None
     
-    print(
+    logging.info(
         f"📺 Consultando episodios: {url_anime}"
     )
     
@@ -403,15 +404,15 @@ def obtener_ultimo_episodio(driver, url_anime, max_intentos=3):
             
         except requests.exceptions.RequestException as e:
 
-            print(
+            logging.warning(
                 f"⚠️ Error consultando episodios "
                 f"(intento {intento}/{max_intentos}): {e}"
             )
 
             if intento < max_intentos:
-                print("🔄 Reintentando...")
+                logging.info("🔄 Reintentando...")
             else:
-                print(
+                logging.error(
                     "❌ No se pudo acceder a la página."
                 )
                 return None
@@ -449,14 +450,14 @@ def obtener_ultimo_episodio(driver, url_anime, max_intentos=3):
         )
 
         if not lista:
-            print(
+            logging.error(
                 "❌ No se encontró la lista de episodios."
             )
             return None
 
         elementos = lista.find_all("a")
 
-        print(
+        logging.info(
             f"🔎 Episodios encontrados: "
             f"{len(elementos)}"
         )
@@ -501,7 +502,7 @@ def obtener_ultimo_episodio(driver, url_anime, max_intentos=3):
                 "url": enlace
             })
 
-            print(
+            logging.info(
                 f"🎬 Episodio {numero}: {enlace}"
             )
 
@@ -511,7 +512,7 @@ def obtener_ultimo_episodio(driver, url_anime, max_intentos=3):
 
         if not episodios:
 
-            print(
+            logging.error(
                 "❌ No se encontraron episodios."
             )
 
@@ -526,12 +527,12 @@ def obtener_ultimo_episodio(driver, url_anime, max_intentos=3):
             key=lambda x: x["episodio"]
         )
 
-        print(
+        logging.info(
             f"✅ Último episodio encontrado: "
             f"{ultimo['episodio']}"
         )
 
-        print(
+        logging.info(
             f"🔗 URL: {ultimo['url']}"
         )
 
@@ -539,7 +540,7 @@ def obtener_ultimo_episodio(driver, url_anime, max_intentos=3):
 
     except Exception as e:
 
-        print(
+        logging.error(
             f"❌ Error procesando episodios: {e}"
         )
 
@@ -558,17 +559,17 @@ def buscar_boton_descarga(driver, video_url):
             enlace_descarga = boton_descarga.get_attribute("href")
             return enlace_descarga
         else:
-            print(f"No se encontró el botón de descarga en {video_url}")
+            logging.info(f"No se encontró el botón de descarga en {video_url}")
             return None
 
     except Exception as e:
-        print(f"Error al acceder a {video_url}: {e}")
+        logging.error(f"Error al acceder a {video_url}: {e}")
         return None
 
 
 def buscar_y_obtener_url_anime(driver, nombre_anime):
     try:
-        print(f"🔍 Buscando en la web de TioAnime: {nombre_anime}")
+        logging.info(f"🔍 Buscando en la web de TioAnime: {nombre_anime}")
         driver.get("https://tioanime.com/")
 
         wait = WebDriverWait(driver, 10)
@@ -594,7 +595,7 @@ def buscar_y_obtener_url_anime(driver, nombre_anime):
 
         try:
             # 4. Intentar capturar el primer resultado del desplegable dinámico
-            print("⏳ Buscando en el menú desplegable...")
+            logging.info("⏳ Buscando en el menú desplegable...")
             primer_resultado = wait.until(
                 EC.presence_of_element_located(
                     (By.CSS_SELECTOR, "div#search-results a.anime, div#search-results a"))
@@ -602,10 +603,10 @@ def buscar_y_obtener_url_anime(driver, nombre_anime):
             href_relativo = primer_resultado.get_attribute("href")
 
             if href_relativo and "javascript" not in href_relativo and "#" not in href_relativo:
-                print(f"✅ ¡Encontrado en el desplegable! URL: {href_relativo}")
+                logging.info(f"✅ ¡Encontrado en el desplegable! URL: {href_relativo}")
                 return href_relativo
         except:
-            print(
+            logging.warning(
                 "⚠️ El menú desplegable no respondió. Enviando tecla ENTER por seguridad...")
 
         # 5. Respaldo por ENTER si el desplegable falla
@@ -618,11 +619,11 @@ def buscar_y_obtener_url_anime(driver, nombre_anime):
         )
         href_relativo = primer_resultado_directorio.get_attribute("href")
 
-        print(f"✅ ¡Encontrado por redirección! URL: {href_relativo}")
+        logging.info(f"✅ ¡Encontrado por redirección! URL: {href_relativo}")
         return href_relativo
 
     except Exception as e:
-        print(
+        logging.error(
             f"❌ No se pudo encontrar el anime '{nombre_anime}' de ninguna forma: {e}")
         return None
 
@@ -633,11 +634,11 @@ def buscar_episodio(driver, url_anime, numero_episodio_buscado, max_intentos=3):
     """
 
     if not url_anime:
-        print("❌ URL del anime vacía.")
+        logging.error("❌ URL del anime vacía.")
         driver.quit()
         return None
     
-    print(f"📺 Consultando episodios para: {url_anime} (Buscando episodio {numero_episodio_buscado})")
+    logging.info(f"📺 Consultando episodios para: {url_anime} (Buscando episodio {numero_episodio_buscado})")
     
     # --------------------------------------------------
     # Conexión y carga con Selenium (con reintentos)
@@ -653,11 +654,11 @@ def buscar_episodio(driver, url_anime, numero_episodio_buscado, max_intentos=3):
             cargado_exitoso = True
             break
         except Exception as e:
-            print(f"⚠️ Error cargando la página (intento {intento}/{max_intentos}): {e}")
+            logging.warning(f"⚠️ Error cargando la página (intento {intento}/{max_intentos}): {e}")
             if intento < max_intentos:
-                print("🔄 Reintentando...")
+                logging.info("🔄 Reintentando...")
             else:
-                print("❌ No se pudo acceder a la página tras varios intentos.")
+                logging.error("❌ No se pudo acceder a la página tras varios intentos.")
                 driver.quit()
                 return None
 
@@ -676,11 +677,11 @@ def buscar_episodio(driver, url_anime, numero_episodio_buscado, max_intentos=3):
         lista = soup.find("ul", class_="episodes-list")
 
         if not lista:
-            print("❌ BeautifulSoup no encontró <ul class='episodes-list'>")
+            logging.error("❌ BeautifulSoup no encontró <ul class='episodes-list'>")
             return None
 
         elementos = lista.find_all("a")
-        print(f"🔎 Analizando {len(elementos)} elementos en la lista de episodios...")
+        logging.info(f"🔎 Analizando {len(elementos)} elementos en la lista de episodios...")
 
         for elemento in elementos:
             elemento_episodio = elemento.select_one("p span")
@@ -710,19 +711,19 @@ def buscar_episodio(driver, url_anime, numero_episodio_buscado, max_intentos=3):
 
                 enlace = urljoin(url_anime, href)
 
-                print(f"✅ ¡Episodio {numero} encontrado!")
-                print(f"🔗 URL: {enlace}")
+                logging.info(f"✅ ¡Episodio {numero} encontrado!")
+                logging.info(f"🔗 URL: {enlace}")
 
                 return {
                     "episodio": numero,
                     "url": enlace
                 }
 
-        print(f"❌ No se encontró el episodio {numero_episodio_buscado}.")
+        logging.error(f"❌ No se encontró el episodio {numero_episodio_buscado}.")
         return None
 
     except Exception as e:
-        print(f"❌ Error procesando episodios: {e}")
+        logging.error(f"❌ Error procesando episodios: {e}")
         try:
             driver.quit()
         except:
