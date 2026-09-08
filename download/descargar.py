@@ -4,6 +4,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import os
 import logging
+# 📝 Exportar el valor de la variable a un archivo .txt de depuración
+import json
 
 from utilidades.archivos import leer_nombres_desde_txt, guardar_resultados_videos_txt
 from utilidades.navegador import configurar_navegador
@@ -252,72 +254,53 @@ def buscar_boton_descarga(driver, video_url):
 
 def detectar_servidor_descarga(driver):
     """
-    Detecta el servidor según la URL actual y/o elementos presentes
-    en la página.
+    Detecta el servidor analizando la URL, los atributos href y 
+    el texto visible de los botones o enlaces en páginas intermedias.
     """
-
+    
+    # Dar un breve respiro para que carguen los elementos dinámicos de la página intermedia
+    time.sleep(2)
     url = driver.current_url.lower()
 
-    # -----------------------------------------
-    # Servidores conocidos por URL
-    # -----------------------------------------
-
-    if "mega.nz" in url:
+    # 1. Detección rápida por URL actual
+    if "mega.nz" in url or "mega.co.nz" in url:
         return "mega"
-
-    if "mega.co.nz" in url:
-        return "mega"
-
     if "streamtape.com" in url:
         return "streamtape"
-
-    if "voe.sx" in url:
+    if "voe.sx" in url or "voe" in url:
         return "voe"
-
-    if "voe" in url:
-        return "voe"
-
-    if "dood" in url:
+    if "dood" in url or "doodstream" in url:
         return "doodstream"
+    if "mediafire.com" in url:
+        return "mediafire"
 
-    # -----------------------------------------
-    # Si no se pudo detectar por URL,
-    # revisar elementos de la página
-    # -----------------------------------------
-
+    # 2. Búsqueda profunda en elementos (Enlaces y Botones)
     try:
-
-        elementos = driver.find_elements(
-            By.TAG_NAME,
-            "a"
-        )
+        # Buscamos tanto etiquetas 'a' como botones 'button' o divs interactivos
+        elementos = driver.find_elements(By.TAG_NAME, "a") + driver.find_elements(By.TAG_NAME, "button")
 
         for elemento in elementos:
+            try:
+                href = elemento.get_attribute("href") or ""
+                texto_elemento = elemento.text.lower()
+                
+                contenido_total = (href + " " + texto_elemento).lower()
 
-            href = elemento.get_attribute("href")
-
-            if not href:
+                if "mega" in contenido_total:
+                    return "mega"
+                if "streamtape" in contenido_total:
+                    return "streamtape"
+                if "voe" in contenido_total:
+                    return "voe"
+                if "dood" in contenido_total:
+                    return "doodstream"
+                if "mediafire" in contenido_total:
+                    return "mediafire"
+            except Exception:
                 continue
 
-            href = href.lower()
-
-            if "mega.nz" in href or "mega.co.nz" in href:
-                return "mega"
-
-            if "streamtape.com" in href:
-                return "streamtape"
-
-            if "voe.sx" in href:
-                return "voe"
-
-            if "doodstream" in href:
-                return "doodstream"
-
     except Exception as e:
-
-        logging.error(
-            f"⚠️ Error detectando servidor: {e}"
-        )
+        logging.error(f"⚠️ Error detectando servidor en página intermedia: {e}")
 
     return "desconocido"
 
@@ -342,7 +325,11 @@ def encontrar_boton_descarga(driver, servidor):
                 "#download"
             ),
         ],
-
+        "mediafire": [
+            (By.CSS_SELECTOR, "#downloadButton"),
+            (By.CSS_SELECTOR, "a.popservers"),
+            (By.CSS_SELECTOR, "a[aria-label*='Download file']")
+        ],
         "voe": [
             (
                 By.CSS_SELECTOR,
@@ -459,19 +446,19 @@ def hacer_click_en_boton_descarga(
                 texto_pagina = driver.page_source.lower()
 
                 # Verificamos si aparece el mensaje exacto o variaciones comunes
-                if "el archivo ya no está disponible" in texto_pagina or "file no longer available" in texto_pagina:
+                if "el archivo ya no está disponible" in texto_pagina or "file no longer available" in texto_pagina or "acceder al archivo" in texto_pagina:
                     logging.error(f"❌ Error en Mega: El archivo ya no está disponible.")
-                    return False
+                    return "archivo_caido"
 
                 if "archivo no encontrado" in texto_pagina or "file not found" in texto_pagina:
                     logging.error(
                         f"❌ Error en Mega: El archivo no fue encontrado o fue eliminado.")
-                    return False
+                    return "archivo_caido"
 
                 '''
                 if texto_pagina or "bandwidth quota exceeded" in texto_pagina or "quota exceeded" in texto_pagina:
                     logging.info(f"⚠️ Error en Mega: Se ha agotado la cuota de transferencia.")
-                    return False
+                    return "archivo_caido"
                 '''
 
             except Exception as e:
@@ -588,14 +575,17 @@ def descargar_video_con_reintentos(
                 video["nombre"]
             )
 
-            if resultado:
-
+            # Si la descarga fue exitosa
+            if resultado is True:
                 logging.info(
                     f"✅ Descarga completada: "
                     f"{video['nombre']}"
                 )
-
                 return True
+
+            # Si detectó un error crítico de cuota o archivo caí­do, detiene los reintentos inmediatamente y lo propaga
+            if resultado in ["archivo_caido", "cuota_agotada"]:
+                return resultado
 
             logging.error(
                 f"❌ Falló el intento "
@@ -738,13 +728,15 @@ def flujo_descarga_animes(file_name, download_dir):
         FUENTES_ANIME
     )
 
+    with open("videos_encontrados.txt", "w", encoding="utf-8") as archivo_txt:
+        json.dump(videos_encontrados, archivo_txt, ensure_ascii=False, indent=4)
+
     if not videos_encontrados:
         logging.info("No se encontraron videos para los animes indicados.")
         return False
 
-    videos_finales = proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados)
+    proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados)
 
-    # proceso_local_descargar_archivos_continua(download_dir, videos_finales)
     
 
 
@@ -761,11 +753,26 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
         return False
 
     try:
-        # Obtenemos la lista inicial de videos encontrados
-        videos_brutos = buscar_enlace_descarga_y_actualizar(
-            driver,
-            videos_encontrados
+# 🛡️ Validar si la fuente es TioAnime
+        # Verificamos si algún elemento no pertenece a TioAnime (ej. JKAnime)
+        es_tioanime = all(
+            str(video.get("fuente", "")).lower() == "tioanime" 
+            for video in videos_encontrados
         )
+
+        if es_tioanime:
+            # Si es TioAnime, procedemos con su lógica de búsqueda de enlaces habitual
+            videos_brutos = buscar_enlace_descarga_y_actualizar(
+                driver,
+                videos_encontrados
+            )
+        else:
+            # Si la fuente es otra (ej. JKAnime), los enlaces ya vienen listos en 'link_descarga'
+            logging.info("ℹ️ Fuente detectada distinta de TioAnime. Usando 'link_descarga' preexistente.")
+            videos_brutos = videos_encontrados
+        
+        with open("videos_brutos.txt", "w", encoding="utf-8") as archivo_txt:
+            json.dump(videos_brutos, archivo_txt, ensure_ascii=False, indent=4)
 
         if not videos_brutos:
             logging.error("❌ No se obtuvieron enlaces de descarga para validar.")
@@ -790,7 +797,7 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
                 # Si es False: El enlace falló
                 logging.error(
                     f"❌ Enlace caído o con cuota en Mega para {video.get('nombre')}. Buscando en otra fuente...")
-                # (Aquí puedes agregar lógica para buscar en otra fuente si lo deseas)
+    
 
     finally:
         try:
@@ -824,87 +831,6 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
 # ==========================================
 
 
-def proceso_local_descargar_archivos_continua(download_dir, videos_finales):
-    """
-    Toma la lista de videos con enlaces válidos y ejecuta la descarga local,
-    actualizando el servidor al terminar cada uno.
-    """
-    if not videos_finales:
-        logging.error("❌ No hay videos para descargar.")
-        return
-
-    logging.info("\nAnimes listos para descargar:")
-    for idx, video in enumerate(videos_finales, 1):
-        logging.info(
-            f"{idx}. {video.get('nombre')} [{video.get('estado', 'Desconocido')}]")
-
-    logging.info("\nIniciando descargas automáticamente...")
-
-    driver_servidor = configurar_navegador(download_dir)
-    if driver_servidor is None:
-        logging.error("❌ No se pudo iniciar el navegador para las descargas.")
-        return
-
-    try:
-        for video in videos_finales:
-            link_descarga = video.get("link_descarga")
-
-            # Si el enlace no existe, está caído o la cuota de Mega está agotada, lo saltamos
-            if not link_descarga or link_descarga == "No encontrado" or video.get("estado") in ["Archivo Caído", "Cuota Agotada"]:
-                logging.info(
-                    f"⚠️ Saltando {video.get('nombre')}: enlace no disponible o bloqueado por Mega.")
-                continue
-            
-        # 1. Evaluamos la validación
-            es_valido = validar_enlace_mega(driver_servidor, link_descarga)
-
-            if es_valido:
-                # Si es True: Lo marcamos como Pendiente y lo guardamos en la lista temporal
-                logging.info(f"✅ Enlace válido para: {video.get('nombre')}")
-            else:
-                # Si es False: El enlace falló
-                logging.error(
-                    f"❌ Enlace caído o con cuota en Mega para {video.get('nombre')}. Buscando en otra fuente...")
-                continue
-  
-            logging.info("\n" + "=" * 60)
-            logging.info(f"Descargando: {video.get('nombre')}")
-            logging.info("=" * 60)
-
-            resultado = descargar_video_con_reintentos(
-                video,
-                download_dir,
-                max_intentos=3
-            )
-
-            if not resultado:
-                logging.error(f"❌ No se pudo descargar: {video.get('nombre')}")
-            else:
-                logging.info(f"✅ Video descargado correctamente.")
-
-                # Actualizar el servidor local
-                nombre_servidor = video.get('nombre_anime')
-                episodio_servidor = video.get(
-                    'episodio_buscado') or video.get('episodio')
-
-                if nombre_servidor and episodio_servidor:
-                    marcar_anime_descargado_con_selenium(
-                        driver_servidor,
-                        nombre_servidor,
-                        episodio_servidor
-                    )
-                else:
-                    logging.error(
-                        "⚠️ No se pudieron obtener los datos exactos para actualizar el servidor.")
-
-    finally:
-        try:
-            driver_servidor.quit()
-            logging.error("🔒 Driver de servidor cerrado.")
-        except:
-            pass
-
-
 def proceso_local_descargar_archivos(download_dir):
     """
     Se conecta a Google Sheets, lee los animes pendientes, y ejecuta 
@@ -924,10 +850,11 @@ def proceso_local_descargar_archivos(download_dir):
         logging.info("ℹ️ No hay registros en Google Sheets.")
         return
 
-    # 2. Filtramos únicamente los que tengan estado "Pendiente"
+  # 2. Filtramos los que tengan estado "Pendiente" o "Cambiar Fuente"
     videos_finales = [
         {
             "nombre": r.get("nombre"),
+            "fuente": r.get("fuente"),
             "nombre_anime": r.get("nombre"), # Compatibilidad por si tu lógica usa esta llave
             "episodio_buscado": r.get("episodio"),
             "episodio": r.get("episodio"),
@@ -935,11 +862,11 @@ def proceso_local_descargar_archivos(download_dir):
             "estado": r.get("estado")
         }
         for r in registros_hoja 
-        if r.get("estado", "").lower() == "pendiente"
+        if r.get("estado", "").lower() in ["pendiente", "cambiar fuente"]
     ]
 
     if not videos_finales:
-        logging.info("🎉 ¡No hay animes con estado 'Pendiente' para descargar en Google Sheets!")
+        logging.info("🎉 ¡No hay animes pendientes o para cambiar fuente en Google Sheets!")
         return
 
     logging.info(f"\nAnimes listos para descargar ({len(videos_finales)}):")
@@ -976,38 +903,129 @@ def proceso_local_descargar_archivos(download_dir):
                 max_intentos=3
             )
             
-            resultado = True
+            with open("resultados.txt", "w", encoding="utf-8") as archivo_txt:
+                json.dump(resultado, archivo_txt, ensure_ascii=False, indent=4)
+
+                        # 1. Actualizar el servidor local (tu lógica actual)
+            nombre_servidor = video.get('nombre_anime') or video.get('nombre')
+            episodio_servidor = video.get('episodio_buscado') or video.get('episodio')
             
             # Dentro del ciclo de descargas de tu función:
-            if not resultado:
-                logging.error(f"❌ No se pudo descargar: {video.get('nombre')}")
-            else:
-                logging.info(f"✅ Video descargado correctamente.")
+            # 2. Manejo de resultados post-intento de descarga
+            if resultado in ["archivo_caido", "cuota_agotada"]:
+                estado_error = "Archivo Caído" if resultado == "archivo_caido" else "Cuota Agotada"
+                logging.error(f"❌ {estado_error} detectado en {nombre_servidor}. Buscando otra fuente inmediatamente...")
                 
-                # 1. Actualizar el servidor local (tu lógica actual)
-                nombre_servidor = video.get('nombre_anime') or video.get('nombre')
-                episodio_servidor = video.get('episodio_buscado') or video.get('episodio')
+                enviar_mensaje_telegram(f"🔄 *Cambiando de Fuente*\n\n🎬 Anime: *{nombre_servidor}*\n📺 Episodio: *{episodio_servidor}*\n🔴 Motivo: *{estado_error}*")
                 
-                # Dentro del bloque 'else' cuando tu script local completa la descarga y actualiza a Completado:
-                mensaje = f"📥 *Descarga Exitosa*\n\n🎬 Anime: *{nombre_servidor}*\n📺 Episodio: *{episodio_servidor}*\n🟢 Estado: Completado y Servidor Local actualizado."
-                enviar_mensaje_telegram(mensaje)
+# 1. Intentar buscar un nuevo link en otra fuente para este episodio específico
+                episodio_limpio = int(episodio_servidor) if str(episodio_servidor).isdigit() else episodio_servidor
                 
-                if nombre_servidor and episodio_servidor:
-                    marcar_anime_descargado_con_selenium(
-                        driver_servidor, 
-                        nombre_servidor, 
-                        episodio_servidor
+                link_anterior = video.get("link_descarga")
+                fuente_fallida = video.get("fuente") # ej: "TioAnime"
+                
+                logging.info(f"Fuente fallida: {fuente_fallida}")
+
+                nuevo_video_encontrado = buscar_en_fuentes(
+                    [{"nombre": nombre_servidor, "episodio_buscado": episodio_limpio}],
+                    FUENTES_ANIME,
+                    excluir_fuente=fuente_fallida
+                )
+                try:
+            # 🛡️ Validar si la fuente es TioAnime
+                    # Verificamos si algún elemento no pertenece a TioAnime (ej. JKAnime)
+                    es_tioanime = all(
+                        str(video.get("fuente", "")).lower() == "tioanime" 
+                        for video in nuevo_video_encontrado
                     )
+
+                    if es_tioanime:
+                        # Si es TioAnime, procedemos con su lógica de búsqueda de enlaces habitual
+                        videos_brutos = buscar_enlace_descarga_y_actualizar(
+                            driver_servidor,
+                            nuevo_video_encontrado
+                        )
+                    else:
+                        # Si la fuente es otra (ej. JKAnime), los enlaces ya vienen listos en 'link_descarga'
+                        logging.info("ℹ️ Fuente detectada distinta de TioAnime. Usando 'link_descarga' preexistente.")
+                        videos_brutos = nuevo_video_encontrado
                     
+                    with open("videos_brutos.txt", "w", encoding="utf-8") as archivo_txt:
+                        json.dump(videos_brutos, archivo_txt, ensure_ascii=False, indent=4)
+
+                    if not videos_brutos:
+                        logging.error("❌ No se obtuvieron enlaces de descarga para validar.")
+                        return False
+
+                    # 🛡️ Validación de estado en Mega para cada video encontrado
+                    logging.info("\n🔎 Validando estado de los enlaces en Mega...")
+                    videos_finales = []  # <--- Creamos una lista nueva vacía para los resultados limpios
+
+                    for video in videos_brutos:
+                        enlace_mega = video.get("link_descarga") or video.get("enlace")
+
+                        # 1. Evaluamos la validación
+                        es_valido = validar_enlace_mega(driver_servidor, enlace_mega)
+
+                        if es_valido:
+                            # Si es True: Lo marcamos como Pendiente y lo guardamos en la lista temporal
+                            logging.info(f"✅ Enlace válido para: {video.get('nombre')}")
+                            video["estado"] = "Pendiente"
+                            videos_finales.append(video)
+                        else:
+                            # Si es False: El enlace falló
+                            logging.error(
+                                f"❌ Enlace caído o con cuota en Mega para {video.get('nombre')}. Buscando en otra fuente...")
+                
+
+                except Exception as e:
+                    logging.error(f"⚠️ No se pudo cerrar el driver: {e}")
+                 
+
+                
+                # Verificamos si encontró algo y si el enlace es NUEVO
+                if videos_finales and videos_finales[0].get("link_descarga") != link_anterior:
+                    video["link_descarga"] = videos_finales[0]["link_descarga"]
+                    logging.info(f"✅ ¡Nueva fuente y link alternativo encontrado! Reintentando descarga...")
+                    continue
+                else:
+                    logging.error(f"❌ La búsqueda arrojó el mismo enlace caído o no hay fuentes distintas.")
                     actualizar_estado_google_sheets(
                         sheet_service=sheet_service,
-                        nombre_hoja="Animes",                      # El nombre de la pestaña de tu hoja
+                        nombre_hoja="Animes",
                         nombre_anime=nombre_servidor,
-                        episodio=episodio_servidor,
-                        nuevo_estado="Completado"
+                        episodio=episodio_limpio,
+                        nuevo_estado="Sin Fuentes"
                     )
-                else:
-                    logging.error("⚠️ No se pudieron obtener los datos exactos para actualizar el servidor.")
+                    continue
+                
+            elif not resultado:
+                logging.error(f"❌ No se pudo descargar  {video.get('nombre')} por error genérico: {nombre_servidor}")
+                continue
+            
+            logging.info(f"✅ Video descargado correctamente.")
+        
+            
+            # Dentro del bloque 'else' cuando tu script local completa la descarga y actualiza a Completado:
+            mensaje = f"📥 *Descarga Exitosa*\n\n🎬 Anime: *{nombre_servidor}*\n📺 Episodio: *{episodio_servidor}*\n🟢 Estado: Completado y Servidor Local actualizado."
+            enviar_mensaje_telegram(mensaje)
+            
+            if nombre_servidor and episodio_servidor:
+                marcar_anime_descargado_con_selenium(
+                    driver_servidor, 
+                    nombre_servidor, 
+                    episodio_servidor
+                )
+                
+                actualizar_estado_google_sheets(
+                    sheet_service=sheet_service,
+                    nombre_hoja="Animes",                      # El nombre de la pestaña de tu hoja
+                    nombre_anime=nombre_servidor,
+                    episodio=episodio_servidor,
+                    nuevo_estado="Completado"
+                )
+            else:
+                logging.error("⚠️ No se pudieron obtener los datos exactos para actualizar el servidor.")
 
     finally:
         try:

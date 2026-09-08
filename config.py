@@ -1,5 +1,5 @@
 from fuentes.tioanime import buscar_videos_tioanime
-
+from fuentes.jkanime import buscar_videos_jkanime
 
 # ============================================================
 # CARPETAS
@@ -22,6 +22,12 @@ FUENTES_ANIME = [
         "url": "https://tioanime.com/",
         "activa": True,
         "buscar": buscar_videos_tioanime
+    },
+    {
+        "nombre": "Jkanime",
+        "url": "https://jkanime.net/",
+        "activa": True,
+        "buscar": buscar_videos_jkanime
     }
 ]
 

@@ -36,6 +36,10 @@ def configurar_navegador(download_dir):
         # -----------------------------------------
         # Configuración de descargas
         # -----------------------------------------
+        
+        # Opciones recomendadas para estabilidad
+        options.add_argument("--disable-notifications")
+        options.add_argument("--disable-infobars")
 
         options.add_experimental_option(
             "prefs",
@@ -58,7 +62,8 @@ def configurar_navegador(download_dir):
         driver = webdriver.Chrome(
             options=options
         )
-
+        
+        
         logging.info(
             "✅ Chrome iniciado correctamente."
         )

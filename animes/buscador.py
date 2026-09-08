@@ -106,99 +106,79 @@ def extraer_nombres_anime(url, download_dir):
     finally:
         driver.quit()
 
-def buscar_en_fuentes(animes, fuentes):
+def buscar_en_fuentes(animes, fuentes, excluir_fuente=None):
     """
     Busca cada anime en las fuentes disponibles.
-    Prueba las fuentes en orden hasta encontrar el
-    episodio solicitado.
+    Prueba las fuentes en orden hasta encontrar el episodio solicitado.
+    Permite omitir fuentes mediante el parámetro 'excluir_fuente'.
     """
+    # Normalizar fuentes a excluir en una lista en minúsculas
+    if excluir_fuente is None:
+        fuentes_excluidas = []
+    elif isinstance(excluir_fuente, str):
+        fuentes_excluidas = [excluir_fuente.strip().lower()]
+    elif isinstance(excluir_fuente, list):
+        fuentes_excluidas = [str(f).strip().lower() for f in excluir_fuente]
+    else:
+        fuentes_excluidas = []
 
     resultados = []
 
-
-
     for anime in animes:
-        
-        driver_capitulos = configurar_navegador(
-        DOWNLOAD_DIR
-        )
+        driver_capitulos = configurar_navegador(DOWNLOAD_DIR)
 
         nombre = anime.get("nombre")
         episodio_buscado = anime.get("episodio_buscado")
 
         logging.info("\n" + "=" * 60)
         logging.info(f"🔎 Buscando: {nombre}")
-        logging.info(
-            f"🎯 Episodio: {episodio_buscado}"
-        )
+        logging.info(f"🎯 Episodio: {episodio_buscado}")
         logging.info("=" * 60)
 
         encontrado = False
 
         for fuente in fuentes:
+            nombre_fuente = fuente["nombre"]
 
+            # 1. Validar si la fuente está activa
             if not fuente.get("activa", True):
                 continue
 
-            nombre_fuente = fuente["nombre"]
+            # 2. Validar si la fuente debe ser excluida
+            if nombre_fuente.strip().lower() in fuentes_excluidas:
+                logging.info(f"⏭️ Omitiendo fuente excluida: {nombre_fuente}")
+                continue
+
             url_fuente = fuente["url"]
             funcion_busqueda = fuente["buscar"]
 
-            logging.info(
-                f"🌐 Probando fuente: "
-                f"{nombre_fuente}"
-            )
+            logging.info(f"🌐 Probando fuente: {nombre_fuente}")
 
             try:
-
                 videos = funcion_busqueda(
                     driver_capitulos,
                     url_fuente,
                     [anime]
-
                 )
 
                 if videos:
-
-                    logging.info(
-                        f"✅ Encontrado en "
-                        f"{nombre_fuente}"
-                    )
+                    logging.info(f"✅ Encontrado en {nombre_fuente}")
 
                     for video in videos:
+                        video["fuente"] = nombre_fuente
 
-                        video["fuente"] = (
-                            nombre_fuente
-                        )
-
-                    resultados.extend(
-                        videos
-                    )
-
+                    resultados.extend(videos)
                     encontrado = True
                     break
 
-                logging.error(
-                    f"❌ {nombre_fuente}: "
-                    f"episodio no encontrado."
-                )
+                logging.error(f"❌ {nombre_fuente}: episodio no encontrado.")
 
             except Exception as e:
+                logging.error(f"⚠️ Error en {nombre_fuente}: {type(e).__name__}: {e}")
 
-                logging.error(
-                    f"⚠️ Error en "
-                    f"{nombre_fuente}: {type(e).__name__}: {e}"
-                )
-        
-        driver_capitulos.quit()        
+        driver_capitulos.quit()
 
         if not encontrado:
-
-            logging.error(
-                f"❌ No se encontró "
-                f"{nombre} "
-                f"episodio {episodio_buscado}"
-            )
-
+            logging.error(f"❌ No se encontró {nombre} episodio {episodio_buscado}")
 
     return resultados
