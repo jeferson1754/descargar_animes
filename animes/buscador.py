@@ -6,7 +6,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-
 from utilidades.navegador import configurar_navegador
 from config import DOWNLOAD_DIR
 
@@ -182,3 +181,4 @@ def buscar_en_fuentes(animes, fuentes, excluir_fuente=None):
             logging.error(f"❌ No se encontró {nombre} episodio {episodio_buscado}")
 
     return resultados
+

@@ -13,6 +13,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from utilidades.archivos import normalizar_nombre
 from utilidades.navegador import configurar_navegador
+from animes.comparador import tomar_captura_express
 
 
 URL_TIOANIME = "https://tioanime.com/anime/"
@@ -52,6 +53,13 @@ def buscar_pagina_principal(url, anime, max_intentos=3):
             respuesta = requests.get(
                 url,
                 timeout=10
+            )
+
+            tomar_captura_express(
+                url=url, 
+                nombre_fuente="TioAnime", 
+                nombre_anime=anime["nombre"], 
+                episodio=anime["episodio_buscado"]
             )
 
             respuesta.raise_for_status()

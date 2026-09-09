@@ -17,3 +17,5 @@ token.pickle
 .env
 
 historial_ejecuciones.log
+
+debug_screenshots/

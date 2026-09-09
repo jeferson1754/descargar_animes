@@ -1,9 +1,11 @@
 import re
 import os
 import logging
-
+import os
 from utilidades.archivos import extraer_episodio_archivo
-
+from datetime import datetime
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 
 def normalizar_nombre(nombre):
     """
@@ -137,3 +139,48 @@ def comparar_descargas(
             )
 
     return animes_no_descargados
+
+
+def tomar_captura_express(url, nombre_fuente, nombre_anime="", episodio=""):
+    """
+    Crea un driver temporal en modo headless, navega a la URL,
+    guarda una captura de pantalla y cierra el navegador inmediatamente.
+    """
+    CARPETA_DEBUG = "debug_screenshots"
+    os.makedirs(CARPETA_DEBUG, exist_ok=True)
+
+    # Configuración del navegador temporal en modo headless (invisible)
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+    driver = None
+    try:
+        logging.info(f"📸 Generando captura express para {nombre_fuente}...")
+        driver = webdriver.Chrome(options=options)
+        driver.get(url)
+
+        # Formatear el nombre del archivo
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        fuente_limpia = re.sub(r'[^\w\-_\. ]', '_', str(nombre_fuente))
+        anime_limpio = re.sub(r'[^\w\-_\. ]', '_', str(nombre_anime)) if nombre_anime else "busqueda"
+        ep_texto = f"_EP{episodio}" if episodio else ""
+
+        nombre_archivo = f"debug_{fuente_limpia}_{anime_limpio}{ep_texto}_{timestamp}.png"
+        ruta_completa = os.path.join(CARPETA_DEBUG, nombre_archivo)
+
+        driver.save_screenshot(ruta_completa)
+        logging.info(f"✅ Captura express guardada en: {ruta_completa}")
+        return ruta_completa
+
+    except Exception as e:
+        logging.error(f"⚠️ Error al tomar captura express en {nombre_fuente}: {e}")
+        return None
+
+    finally:
+        # Garantiza el cierre del navegador incluso si ocurre un error
+        if driver:
+            driver.quit()

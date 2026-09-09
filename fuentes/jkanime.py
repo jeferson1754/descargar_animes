@@ -14,6 +14,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from utilidades.archivos import normalizar_nombre
+from animes.comparador import tomar_captura_express
 
 
 # pruebas_tioanime.py
@@ -59,6 +60,14 @@ def buscar_pagina_principal(url, animes, max_intentos=3):
         try:
             print(f"🌐 Conectando a la URL mediante requests: {url}")
             response = requests.get(url, headers=headers, timeout=15)
+            
+            tomar_captura_express(
+                url=url, 
+                nombre_fuente="JKanime", 
+                nombre_anime=animes["nombre"], 
+                episodio=animes["episodio_buscado"]
+            )
+
             if response.status_code == 200:
                 html_contenido = response.text
                 break
