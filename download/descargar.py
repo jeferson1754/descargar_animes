@@ -912,98 +912,104 @@ def proceso_local_descargar_archivos(download_dir):
             
             # Dentro del ciclo de descargas de tu función:
             # 2. Manejo de resultados post-intento de descarga
+            # Dentro del ciclo de descargas de tu función:
             if resultado in ["archivo_caido", "cuota_agotada"]:
                 estado_error = "Archivo Caído" if resultado == "archivo_caido" else "Cuota Agotada"
                 logging.error(f"❌ {estado_error} detectado en {nombre_servidor}. Buscando otra fuente inmediatamente...")
-                
-                enviar_mensaje_telegram(f"🔄 *Cambiando de Fuente*\n\n🎬 Anime: *{nombre_servidor}*\n📺 Episodio: *{episodio_servidor}*\n🔴 Motivo: *{estado_error}*")
-                
-# 1. Intentar buscar un nuevo link en otra fuente para este episodio específico
-                episodio_limpio = int(episodio_servidor) if str(episodio_servidor).isdigit() else episodio_servidor
-                
-                link_anterior = video.get("link_descarga")
-                fuente_fallida = video.get("fuente") # ej: "TioAnime"
-                
-                logging.info(f"Fuente fallida: {fuente_fallida}")
 
+                enviar_mensaje_telegram(
+                    f"🔄 *Cambiando de Fuente*\n\n🎬 Anime: *{nombre_servidor}*\n📺 Episodio: *{episodio_servidor}*\n🔴 Motivo: *{estado_error}*"
+                )
+
+                # 1. Acumular fuentes fallidas (Historial previo + Fuente actual)
+                fuente_actual = video.get("fuente", "Desconocida")
+                fallidas_previas_str = video.get("fuentes_fallidas", "")
+                
+                lista_excluidas = [f.strip() for f in fallidas_previas_str.split(",") if f.strip()]
+                if fuente_actual and fuente_actual not in lista_excluidas:
+                    lista_excluidas.append(fuente_actual)
+                    
+                nueva_cadena_fallidas = ", ".join(lista_excluidas) # Resultado ej: "TioAnime, JKAnime"
+
+                episodio_limpio = int(episodio_servidor) if str(episodio_servidor).isdigit() else episodio_servidor
+                link_anterior = video.get("link_descarga")
+
+                logging.info(f"🚫 Fuentes descartadas acumuladas: {nueva_cadena_fallidas}")
+
+                # 2. Re-buscar excluyendo TODAS las fuentes fallidas
                 nuevo_video_encontrado = buscar_en_fuentes(
                     [{"nombre": nombre_servidor, "episodio_buscado": episodio_limpio}],
                     FUENTES_ANIME,
-                    excluir_fuente=fuente_fallida
+                    excluir_fuente=lista_excluidas  # Pasa la lista completa
                 )
-                try:
-            # 🛡️ Validar si la fuente es TioAnime
-                    # Verificamos si algún elemento no pertenece a TioAnime (ej. JKAnime)
-                    es_tioanime = all(
-                        str(video.get("fuente", "")).lower() == "tioanime" 
-                        for video in nuevo_video_encontrado
-                    )
 
-                    if es_tioanime:
-                        # Si es TioAnime, procedemos con su lógica de búsqueda de enlaces habitual
-                        videos_brutos = buscar_enlace_descarga_y_actualizar(
-                            driver_servidor,
-                            nuevo_video_encontrado
+                videos_finales = []
+                if nuevo_video_encontrado:
+                    try:
+                        es_tioanime = all(
+                            str(v.get("fuente", "")).lower() == "tioanime" 
+                            for v in nuevo_video_encontrado
                         )
-                    else:
-                        # Si la fuente es otra (ej. JKAnime), los enlaces ya vienen listos en 'link_descarga'
-                        logging.info("ℹ️ Fuente detectada distinta de TioAnime. Usando 'link_descarga' preexistente.")
-                        videos_brutos = nuevo_video_encontrado
-                    
-                    with open("videos_brutos.txt", "w", encoding="utf-8") as archivo_txt:
-                        json.dump(videos_brutos, archivo_txt, ensure_ascii=False, indent=4)
 
-                    if not videos_brutos:
-                        logging.error("❌ No se obtuvieron enlaces de descarga para validar.")
-                        return False
-
-                    # 🛡️ Validación de estado en Mega para cada video encontrado
-                    logging.info("\n🔎 Validando estado de los enlaces en Mega...")
-                    videos_finales = []  # <--- Creamos una lista nueva vacía para los resultados limpios
-
-                    for video in videos_brutos:
-                        enlace_mega = video.get("link_descarga") or video.get("enlace")
-
-                        # 1. Evaluamos la validación
-                        es_valido = validar_enlace_mega(driver_servidor, enlace_mega)
-
-                        if es_valido:
-                            # Si es True: Lo marcamos como Pendiente y lo guardamos en la lista temporal
-                            logging.info(f"✅ Enlace válido para: {video.get('nombre')}")
-                            video["estado"] = "Pendiente"
-                            videos_finales.append(video)
+                        if es_tioanime:
+                            videos_brutos = buscar_enlace_descarga_y_actualizar(
+                                driver_servidor,
+                                nuevo_video_encontrado
+                            )
                         else:
-                            # Si es False: El enlace falló
-                            logging.error(
-                                f"❌ Enlace caído o con cuota en Mega para {video.get('nombre')}. Buscando en otra fuente...")
-                
+                            logging.info("ℹ️ Fuente distinta de TioAnime. Usando 'link_descarga' preexistente.")
+                            videos_brutos = nuevo_video_encontrado
 
-                except Exception as e:
-                    logging.error(f"⚠️ No se pudo cerrar el driver: {e}")
-                 
+                        # Validar los nuevos enlaces obtenidos en Mega
+                        for v in videos_brutos:
+                            enlace_mega = v.get("link_descarga") or v.get("enlace")
+                            if validar_enlace_mega(driver_servidor, enlace_mega):
+                                logging.info(f"✅ Enlace válido en Mega para: {v.get('nombre')}")
+                                v["estado"] = "Pendiente"
+                                videos_finales.append(v)
+                            else:
+                                logging.error("❌ El enlace de la nueva fuente también está caído en Mega.")
 
-                
-                # Verificamos si encontró algo y si el enlace es NUEVO
+                    except Exception as e:
+                        logging.error(f"⚠️ Error procesando la re-búsqueda de fuente: {e}")
+
+                # 3. Evaluar resultado y actualizar tanto objeto local como Google Sheets
                 if videos_finales and videos_finales[0].get("link_descarga") != link_anterior:
-                    video["link_descarga"] = videos_finales[0]["link_descarga"]
-                    logging.info(f"✅ ¡Nueva fuente y link alternativo encontrado! Reintentando descarga...")
-                    continue
-                else:
-                    logging.error(f"❌ La búsqueda arrojó el mismo enlace caído o no hay fuentes distintas.")
+                    nueva_fuente_nombre = videos_finales[0].get("fuente", "Desconocida")
+                    nuevo_link_descarga = videos_finales[0].get("link_descarga")
+
+                    # A) Actualizar diccionario local en memoria
+                    video["link_descarga"] = nuevo_link_descarga
+                    video["fuente"] = nueva_fuente_nombre
+                    video["fuentes_fallidas"] = nueva_cadena_fallidas
+
+                    logging.info(f"✅ Nueva fuente '{nueva_fuente_nombre}' encontrada. Sincronizando Sheets...")
+
+                    # B) Sincronizar en Google Sheets
                     actualizar_estado_google_sheets(
                         sheet_service=sheet_service,
                         nombre_hoja="Animes",
                         nombre_anime=nombre_servidor,
                         episodio=episodio_limpio,
+                        nuevo_enlace=nuevo_link_descarga,
+                        nueva_fuente=nueva_fuente_nombre,
+                        fuentes_fallidas=nueva_cadena_fallidas,
+                        nuevo_estado="Pendiente"
+                    )
+                    continue  # Vuelve a intentar la descarga con el nuevo enlace
+                else:
+                    logging.error("❌ No se encontraron fuentes alternativas válidas. Guardando 'Sin Fuentes'.")
+                    video["fuentes_fallidas"] = nueva_cadena_fallidas
+
+                    actualizar_estado_google_sheets(
+                        sheet_service=sheet_service,
+                        nombre_hoja="Animes",
+                        nombre_anime=nombre_servidor,
+                        episodio=episodio_limpio,
+                        fuentes_fallidas=nueva_cadena_fallidas,
                         nuevo_estado="Sin Fuentes"
                     )
                     continue
-                
-            elif not resultado:
-                logging.error(f"❌ No se pudo descargar  {video.get('nombre')} por error genérico: {nombre_servidor}")
-                continue
-            
-            logging.info(f"✅ Video descargado correctamente.")
         
             
             # Dentro del bloque 'else' cuando tu script local completa la descarga y actualiza a Completado:

@@ -189,7 +189,7 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         return False
 
     try:
-        # 1. Rango dinámico: Solicitamos toda la columna A:D con datos
+        # 1. Rango dinámico: Solicitamos toda la columna A:I (9 columnas)
         rango_lectura = "Animes!A:I"
 
         result = sheet_service.spreadsheets().values().get(
@@ -203,23 +203,23 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         if filas_totales_hoja:
             datos_existentes = filas_totales_hoja[1:]
             for fila in datos_existentes:
+                # 🔧 CORRECCIÓN 1: Asegurar 9 elementos por fila (Columnas A a I)
                 while len(fila) < 9:
                     fila.append("")
                 filas_antiguas.append(fila)
 
-       # Fecha y hora actual para la detección de nuevos registros
         tiempo_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
 
         filas_nuevas = []
         for anime in resultados_animes:
             nombre_anime = anime.get("nombre_anime") or anime.get("nombre", "")
-            episodio = anime.get("episodio", "") or anime.get(
-                "episodio_buscado", "")
+            episodio = anime.get("episodio", "") or anime.get("episodio_buscado", "")
             link_descarga = anime.get("link_descarga", "")
             fuente = anime.get("fuente", "TioAnime")
-            fuente_fallida = anime.get("fuente_fallida", "TioAnime")
+            
+            # 🔧 CORRECCIÓN 2: Si es un registro nuevo, fuentes fallidas debe iniciar vacío
+            fuente_fallida = anime.get("fuente_fallida", "")
 
-            # Si el anime ya traía fecha de detección anterior se respeta, si es nuevo se pone la actual
             f_deteccion = anime.get("fecha_deteccion") or tiempo_actual
             f_actualizacion = anime.get("fecha_actualizacion", "")
             f_descarga = anime.get("fecha_descarga", "")
@@ -241,23 +241,30 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
             logging.info("ℹ️ No hay registros nuevos para actualizar en Google Sheets.")
             return False
 
-        # 4. Combinamos: Lo nuevo arriba, lo viejo abajo
+        # Combinar: Lo nuevo arriba, lo viejo abajo
         nuevos_datos_combinados = filas_nuevas + filas_antiguas
 
-        # Agregamos de nuevo la cabecera al principio de todo el bloque
+        # 🔧 CORRECCIÓN 3: Agregar la coma entre "Fuentes Fallidas" y "Fecha Detección"
         filas_finales = [[
-            "Anime", "Episodio", "Enlace", "Fuente","Fuentes Fallidas"
-            "Fecha Detección", "Fecha Actualización", "Fecha Descarga", "Estado"
+            "Anime", 
+            "Episodio", 
+            "Enlace", 
+            "Fuente", 
+            "Fuentes Fallidas",  # <--- Coma agregada aquí
+            "Fecha Detección", 
+            "Fecha Actualización", 
+            "Fecha Descarga", 
+            "Estado"
         ]] + nuevos_datos_combinados
 
-        # 5. Limpiamos toda la hoja de forma limpia (sin importar cuántas filas tenía)
+        # Limpiar la hoja
         sheet_service.spreadsheets().values().clear(
             spreadsheetId=SPREADSHEET_ID,
             range="Animes!A:I",
             body={}
         ).execute()
 
-        # 6. Escribimos todo el bloque optimizado desde la celda A1
+        # Escribir el bloque corregido
         body = {
             "values": filas_finales
         }
@@ -270,11 +277,10 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         ).execute()
 
         logging.info(
-            f"✅ Google Sheets sincronizado con fechas y fuentes: {len(filas_nuevas)} registros nuevos arriba.")
-        # Al finalizar exitosamente 'guardar_y_actualizar_historial_sheets':
-        if not resultados_animes:
-            return
-        # Construimos la lista de animes de forma limpia para el mensaje
+            f"✅ Google Sheets sincronizado correctamente: {len(filas_nuevas)} registros nuevos arriba."
+        )
+
+        # Notificación por Telegram
         lista_detallada = ""
         for anime in resultados_animes:
             nombre = anime.get("nombre_anime") or anime.get("nombre", "Desconocido")
@@ -292,17 +298,29 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         return True
 
     except Exception as e:
-        logging.info(f"❌ Error al actualizar el historial en Google Sheets: {e}")
+        logging.error(f"❌ Error al actualizar el historial en Google Sheets: {e}")
         return False
 
+def actualizar_estado_google_sheets(
+    sheet_service, 
+    nombre_hoja, 
+    nombre_anime, 
+    episodio, 
+    nuevo_estado="Completado",
+    nuevo_enlace=None,
+    nueva_fuente=None,
+    fuentes_fallidas=None
+):
+    """
+    Busca un anime y episodio específico en Google Sheets y actualiza su estado, 
+    fechas, enlace, fuente actual y/o historial de fuentes fallidas de forma segura.
+    """
+    if not sheet_service:
+        logging.error("❌ No hay conexión activa con Google Sheets.")
+        return False
 
-def actualizar_estado_google_sheets(sheet_service, nombre_hoja, nombre_anime, episodio, nuevo_estado="Completado"):
-    """
-    Busca un anime y episodio específico usando la API oficial de Google Sheets
-    y actualiza su columna de estado en la hoja correspondiente.
-    """
     try:
-        # 1. Leemos todo el contenido de la hoja para encontrar la fila exacta
+        # 1. Leer todas las columnas (A:I) para obtener el contenido existente
         rango_lectura = f"{nombre_hoja}!A:I"
         resultado_lectura = sheet_service.spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
@@ -315,13 +333,13 @@ def actualizar_estado_google_sheets(sheet_service, nombre_hoja, nombre_anime, ep
             logging.error("❌ La hoja de Google Sheets está vacía.")
             return False
 
-        # Definimos las posiciones fijas de tus columnas
         col_nombre_idx = 0  # Columna A
         col_ep_idx = 1      # Columna B
-        col_f_descarga_idx = 6  # Columna G (Fecha Descarga)
-        col_estado_idx = 8  # Columna H (Estado)
 
         fila_encontrada_num = None
+        fila_actual = []
+
+        # 2. Buscar la fila correspondiente al anime y episodio
         for index, fila in enumerate(filas[1:], start=2):
             if len(fila) > max(col_nombre_idx, col_ep_idx):
                 val_nombre = str(fila[col_nombre_idx]).strip().lower()
@@ -329,20 +347,39 @@ def actualizar_estado_google_sheets(sheet_service, nombre_hoja, nombre_anime, ep
 
                 if val_nombre == str(nombre_anime).strip().lower() and val_ep == str(episodio).strip():
                     fila_encontrada_num = index
+                    fila_actual = list(fila)
                     break
 
         if not fila_encontrada_num:
-            logging.error(
-                f"⚠️ No se encontró '{nombre_anime}' Ep. {episodio} en Google Sheets para actualizar.")
+            logging.error(f"⚠️ No se encontró '{nombre_anime}' Ep. {episodio} en Google Sheets para actualizar.")
             return False
+
+        # 3. Normalizar la fila para asegurar que tenga las 9 columnas (A a I)
+        while len(fila_actual) < 9:
+            fila_actual.append("")
 
         tiempo_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        # Actualizamos la Columna G (Fecha Descarga) y la Columna H (Estado) de forma simultánea
-        celda_destino = f"{nombre_hoja}!H{fila_encontrada_num}:I{fila_encontrada_num}"
+        # 4. Modificar solo los campos proporcionados
+        if nuevo_enlace is not None:
+            fila_actual[2] = str(nuevo_enlace)      # Col C: Enlace
+        if nueva_fuente is not None:
+            fila_actual[3] = str(nueva_fuente)      # Col D: Fuente
+        if fuentes_fallidas is not None:
+            fila_actual[4] = str(fuentes_fallidas)  # Col E: Fuentes Fallidas
+
+        fila_actual[6] = tiempo_actual              # Col G: Fecha Actualización
+        
+        if nuevo_estado == "Completado":
+            fila_actual[7] = tiempo_actual          # Col H: Fecha Descarga
+            
+        fila_actual[8] = str(nuevo_estado)          # Col I: Estado
+
+        # 5. Reescribir el rango completo A:I para la fila encontrada
+        celda_destino = f"{nombre_hoja}!A{fila_encontrada_num}:I{fila_encontrada_num}"
 
         body = {
-            "values": [[tiempo_actual, nuevo_estado]]
+            "values": [fila_actual]
         }
 
         sheet_service.spreadsheets().values().update(
@@ -353,12 +390,13 @@ def actualizar_estado_google_sheets(sheet_service, nombre_hoja, nombre_anime, ep
         ).execute()
 
         logging.info(
-            f"✅ Google Sheets actualizado: '{nombre_anime}' (Ep. {episodio}) -> '{nuevo_estado}' [Fecha: {tiempo_actual}]")
+            f"✅ Google Sheets actualizado: '{nombre_anime}' (Ep. {episodio}) -> Estado: '{nuevo_estado}' | Fallidas: '{fila_actual[4]}'"
+        )
         return True
+
     except Exception as e:
         logging.error(f"❌ Error al actualizar Google Sheets: {e}")
         return False
-
 
 def verificar_animes_desaparecidos(sheet_service, animes_registrados_sheets, animes_encontrados_web):
     """
