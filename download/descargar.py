@@ -1009,6 +1009,16 @@ def proceso_local_descargar_archivos(download_dir):
                         fuentes_fallidas=nueva_cadena_fallidas,
                         nuevo_estado="Sin Fuentes"
                     )
+                    
+                    # Cuando se agotan las opciones y pasa a 'Sin Fuentes'
+                    mensaje_sin_fuentes = (
+                        f"⚠️ *Alerta: Episodio Sin Fuentes*\n\n"
+                        f"🎬 Anime: *{nombre_servidor}*\n"
+                        f"📺 Episodio: *{episodio_limpio}*\n"
+                        f"🔴 Estado: *Sin Fuentes Disponibles*\n"
+                        f"📝 Nota: Se probaron todas las fuentes descartadas ({nueva_cadena_fallidas}) sin enlace válido en Mega."
+                    )
+                    enviar_mensaje_telegram(mensaje_sin_fuentes)
                     continue
         
             

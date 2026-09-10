@@ -182,7 +182,7 @@ def leer_animes_pendientes(sheet_service):
 def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
     """
     Lee dinámicamente los datos existentes, coloca lo nuevo arriba, 
-    marca lo viejo como 'Completado' y actualiza la hoja sin rangos fijos.
+    actualiza la hoja y envía un resumen por Telegram de TODOS los episodios pendientes.
     """
     if not sheet_service:
         logging.error("❌ No hay conexión activa con Google Sheets.")
@@ -203,7 +203,7 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         if filas_totales_hoja:
             datos_existentes = filas_totales_hoja[1:]
             for fila in datos_existentes:
-                # 🔧 CORRECCIÓN 1: Asegurar 9 elementos por fila (Columnas A a I)
+                # Asegurar 9 elementos por fila (Columnas A a I)
                 while len(fila) < 9:
                     fila.append("")
                 filas_antiguas.append(fila)
@@ -216,8 +216,6 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
             episodio = anime.get("episodio", "") or anime.get("episodio_buscado", "")
             link_descarga = anime.get("link_descarga", "")
             fuente = anime.get("fuente", "TioAnime")
-            
-            # 🔧 CORRECCIÓN 2: Si es un registro nuevo, fuentes fallidas debe iniciar vacío
             fuente_fallida = anime.get("fuente_fallida", "")
 
             f_deteccion = anime.get("fecha_deteccion") or tiempo_actual
@@ -244,13 +242,13 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         # Combinar: Lo nuevo arriba, lo viejo abajo
         nuevos_datos_combinados = filas_nuevas + filas_antiguas
 
-        # 🔧 CORRECCIÓN 3: Agregar la coma entre "Fuentes Fallidas" y "Fecha Detección"
+        # Cabecera con 9 columnas exactas
         filas_finales = [[
             "Anime", 
             "Episodio", 
             "Enlace", 
             "Fuente", 
-            "Fuentes Fallidas",  # <--- Coma agregada aquí
+            "Fuentes Fallidas", 
             "Fecha Detección", 
             "Fecha Actualización", 
             "Fecha Descarga", 
@@ -264,7 +262,7 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
             body={}
         ).execute()
 
-        # Escribir el bloque corregido
+        # Escribir todo el bloque
         body = {
             "values": filas_finales
         }
@@ -280,18 +278,34 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
             f"✅ Google Sheets sincronizado correctamente: {len(filas_nuevas)} registros nuevos arriba."
         )
 
-        # Notificación por Telegram
-        lista_detallada = ""
+        # 📋 CONSTRUIR LISTA DE TODOS LOS PENDIENTES PARA TELEGRAM
+        lista_pendientes = []
+
+        # A) Agregar los recien ingresados (que entran como Pendientes)
         for anime in resultados_animes:
             nombre = anime.get("nombre_anime") or anime.get("nombre", "Desconocido")
             episodio = anime.get("episodio", "") or anime.get("episodio_buscado", "")
-            lista_detallada += f"• *{nombre}* (Ep. {episodio})\n"
+            lista_pendientes.append(f"• *{nombre}* (Ep. {episodio}) _[Nuevo]_")
 
+        # B) Agregar los pendientes anteriores que ya estaban en Google Sheets
+        for fila in filas_antiguas:
+            # Columna I (índice 8) es 'Estado'
+            estado_anterior = str(fila[8]).strip().lower()
+            if estado_anterior == "pendiente":
+                nombre_ant = fila[0]
+                ep_ant = fila[1]
+                lista_pendientes.append(f"• *{nombre_ant}* (Ep. {ep_ant})")
+
+        cadena_pendientes = "\n".join(lista_pendientes) if lista_pendientes else "Ninguno"
+
+        # Mensaje final para Telegram
         mensaje = (
             f"🤖 *Bot de Animes*\n\n"
             f"✅ Búsqueda finalizada.\n"
-            f"📂 Se registraron *{len(filas_nuevas)}* nuevos animes/episodios como Pendientes:\n\n"
-            f"{lista_detallada}"
+            f"🆕 Nuevos registrados: *{len(filas_nuevas)}*\n"
+            f"📌 Total de episodios pendientes: *{len(lista_pendientes)}*\n\n"
+            f"📋 *Lista de Pendientes:*\n"
+            f"{cadena_pendientes}"
         )
 
         enviar_mensaje_telegram(mensaje)
@@ -300,7 +314,6 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
     except Exception as e:
         logging.error(f"❌ Error al actualizar el historial en Google Sheets: {e}")
         return False
-
 def actualizar_estado_google_sheets(
     sheet_service, 
     nombre_hoja, 
