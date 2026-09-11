@@ -18,7 +18,7 @@ def enviar_mensaje_telegram(mensaje):
     payload = {
         "chat_id": chat_id,
         "text": mensaje,
-        "parse_mode": "Markdown"
+        "parse_mode": "HTML"
     }
     
     

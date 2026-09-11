@@ -9,75 +9,59 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 
-def configurar_navegador(download_dir):
-    """
-    Configura Chrome usando Selenium Manager.
+def configurar_navegador(download_dir, visor=False):
+    """Configura Chrome usando Selenium Manager.
+
     No requiere especificar manualmente ChromeDriver.
     """
-
     try:
-
         options = webdriver.ChromeOptions()
 
         # -----------------------------------------
-        # Opciones generales
+        # Opciones generales y silenciamiento de logs
         # -----------------------------------------
-
         options.add_argument("--disable-gpu")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-logging")
         options.add_argument("--log-level=3")
-        options.add_argument("--window-size=800,600")
-
-        # Si quieres que funcione sin interfaz:
-        options.add_argument("--headless=new")
-
-        # -----------------------------------------
-        # Configuración de descargas
-        # -----------------------------------------
-        
-        # Opciones recomendadas para estabilidad
+        options.add_argument("--window-size=1280,720")
         options.add_argument("--disable-notifications")
-        options.add_argument("--disable-infobars")
 
-        options.add_experimental_option(
-            "prefs",
-            {
-                "download.default_directory": download_dir,
-                "download.prompt_for_download": False,
-                "download.directory_upgrade": True,
-                "safebrowsing.enabled": True
-            }
-        )
+        # Evita los mensajes de error de DevTools / GPU en la consola
+        options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
         # -----------------------------------------
-        # Selenium Manager
+        # Modo Headless (Visor)
         # -----------------------------------------
+        # Si visor es False (por defecto), corre oculto en segundo plano.
+        # Si visor es True, abre la ventana visible del navegador.
+        if not visor:
+            options.add_argument("--headless=new")
 
-        logging.info(
-            "🌐 Iniciando Chrome mediante Selenium Manager..."
-        )
+        # -----------------------------------------
+        # Configuración del directorio de descargas
+        # -----------------------------------------
+        # Crear la carpeta si no existe
+        if not os.path.exists(download_dir):
+            os.makedirs(download_dir)
 
-        driver = webdriver.Chrome(
-            options=options
-        )
-        
-        
-        logging.info(
-            "✅ Chrome iniciado correctamente."
-        )
+        prefs = {
+            "download.default_directory": os.path.abspath(download_dir),
+            "download.prompt_for_download": False,
+            "download.directory_upgrade": True,
+            "safebrowsing.enabled": True,
+        }
+        options.add_experimental_option("prefs", prefs)
 
+        # Selenium Manager se encarga del driver automáticamente
+        driver = webdriver.Chrome(options=options)
         return driver
 
     except Exception as e:
-
-        logging.error(
-            f"❌ No se pudo iniciar Chrome: {e}"
-        )
-
-        return 
-
+        logging.error(f"❌ Error al configurar el navegador Chrome: {e}")
+        return None
+    
 def configurar_navegador_inteligente(download_dir):
     """Versión inteligente que detecta la versión de Chrome automáticamente"""
 

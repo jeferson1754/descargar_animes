@@ -731,8 +731,25 @@ def flujo_descarga_animes(file_name, download_dir):
     with open("videos_encontrados.txt", "w", encoding="utf-8") as archivo_txt:
         json.dump(videos_encontrados, archivo_txt, ensure_ascii=False, indent=4)
 
+    # ==================================================================
+    # 📲 NOTIFICACIÓN SI NO SE ENCONTRARON VIDEOS
+    # ==================================================================
     if not videos_encontrados:
+        mensaje_telegram = (
+            "⚠️ <b>No se encontraron episodios en la búsqueda</b>\n\n"
+        )
+        mensaje_telegram += "<b>Episodios consultados sin resultados:</b>\n"
+
+        for item in animes_a_buscar:
+            nombre = item.get("nombre")
+            ep = item.get("episodio_buscado", item.get("episodio_actual", "?"))
+            mensaje_telegram += f"• <b>{nombre}</b> — Ep. {ep}\n"
+
         logging.info("No se encontraron videos para los animes indicados.")
+
+        # Envío a Telegram
+        enviar_mensaje_telegram(mensaje_telegram)
+
         return False
 
     proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados)
