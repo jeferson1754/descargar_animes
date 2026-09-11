@@ -4,6 +4,7 @@ import sys
 # Sube un nivel desde la carpeta /fuentes a la raíz del proyecto
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from download.descargar import proceso_nube_buscar_y_guardar_sheets
 from animes.comparador import tomar_captura_express
 from utilidades.archivos import normalizar_nombre
 from selenium.webdriver.support import expected_conditions as EC
@@ -20,16 +21,12 @@ import logging
 import re
 from utilidades.navegador import configurar_navegador
 from config import DOWNLOAD_DIR
-import os
-import sys
-
 from datetime import datetime
 import json
-
+import os
+import sys
 # Sube un nivel desde la carpeta /fuentes a la raíz del proyecto
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-# Ahora puedes importar config sin errores
 
 
 # pruebas_tioanime.py
@@ -57,7 +54,6 @@ def buscar_pagina_principal(driver, url, animes, max_intentos=3):
     Busca los animes analizando la página principal con BeautifulSoup (requests),
     validando las URLs por su estructura de episodio.
     """
-
 
     """
     Busca los animes analizando la página principal directamente con Selenium (driver),
@@ -102,7 +98,8 @@ def buscar_pagina_principal(driver, url, animes, max_intentos=3):
     # Obtener tarjetas directamente usando Selenium
 # 1. Obtener las tarjetas usando el selector de la nueva estructura
     try:
-        tarjetas = driver.find_elements(By.CSS_SELECTOR, "div.ul.hm article.li")
+        tarjetas = driver.find_elements(
+            By.CSS_SELECTOR, "div.ul.hm article.li")
         if not tarjetas:
             # Fallback en caso de que varíe el contenedor principal
             tarjetas = driver.find_elements(By.CSS_SELECTOR, "article.li")
@@ -141,7 +138,8 @@ def buscar_pagina_principal(driver, url, animes, max_intentos=3):
                 # Fallback: intentar desde el atributo 'title' del enlace
                 title_attr = enlace_tag.get_attribute("title")
                 if title_attr:
-                    texto = title_attr.replace("Ver ", "").split("episodio")[0].strip()
+                    texto = title_attr.replace(
+                        "Ver ", "").split("episodio")[0].strip()
 
             if not texto:
                 partes_url = [p for p in url_completa.split("/") if p]
@@ -243,10 +241,12 @@ def buscar_boton_descarga(driver, video_url):
                     driver.switch_to.window(ventana_principal)
 
                 # Verificar si la lista 'ul.uldwn' ya es visible y contiene filas
-                lista_elementos = driver.find_element(By.CSS_SELECTOR, "ul.uldwn")
+                lista_elementos = driver.find_element(
+                    By.CSS_SELECTOR, "ul.uldwn")
                 if lista_elementos.is_displayed():
                     # Buscar filas excluyendo la cabecera (li.t)
-                    filas = lista_elementos.find_elements(By.CSS_SELECTOR, "li:not(.t)")
+                    filas = lista_elementos.find_elements(
+                        By.CSS_SELECTOR, "li:not(.t)")
                     if len(filas) >= 1:
                         tabla_visible = True
             except Exception:
@@ -328,6 +328,7 @@ def buscar_enlace_descarga_y_actualizar(driver, videos_encontrados):
 
     return videos_con_descarga
 
+
 def buscar_y_obtener_url_anime(driver, nombre_anime):
     try:
         logging.info(f"🔍 Buscando en la web: {nombre_anime}")
@@ -364,18 +365,18 @@ def buscar_y_obtener_url_anime(driver, nombre_anime):
             "⏳ Formulario enviado. Esperando resultados de búsqueda..."
         )
 
-        # 5. Capturar el primer resultado del listado devuelto
+        # 5. Capturar el primer resultado usando la estructura de 'article.li'
         primer_resultado = wait.until(
             EC.presence_of_element_located(
                 (
                     By.CSS_SELECTOR,
-                    "article.anime a, .anime-grid a, ul.Animes a, div.Animes a",
+                    "div.ul.x6 article.li h3.h a, div.ul.x6 article.li figure.i a"
                 )
             )
         )
         href_relativo = primer_resultado.get_attribute("href")
 
-        logging.info(f"✅ ¡Encontrado! URL: {href_relativo}")
+        print(f"✅ ¡Encontrado! URL: {href_relativo}")
         return href_relativo
 
     except Exception as e:
@@ -383,63 +384,344 @@ def buscar_y_obtener_url_anime(driver, nombre_anime):
         return None
 
 
-def buscar_videos_animeflv(driver, url, animes):
-    """
-    Coordina la búsqueda en Jkanime.
-    """
-    logging.info(f"🔍 Buscando videos en: {url}")
+def obtener_ultimo_episodio(driver, url_anime, max_intentos=3):
+    if not url_anime:
+        logging.error("❌ URL del anime vacía.")
+        return None
 
+    print(f"📺 Consultando episodios: {url_anime}")
+
+    # --------------------------------------------------
+    # Navegación con reintentos mediante Selenium
+    # --------------------------------------------------
+    cargado = False
+    for intento in range(1, max_intentos + 1):
+        try:
+            driver.get(url_anime)
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "ul.ep li"))
+            )
+            cargado = True
+            break
+        except Exception as e:
+            print(
+                f"⚠️ Error al cargar la página (intento {intento}/{max_intentos}): {e}"
+            )
+            if intento < max_intentos:
+                logging.info("🔄 Reintentando...")
+                time.sleep(2)
+            else:
+                logging.error("❌ No se pudo acceder a la página con Selenium.")
+                return None
+
+    if not cargado:
+        return None
+
+    # --------------------------------------------------
+    # Extracción de episodios con Selenium
+    # --------------------------------------------------
+    try:
+        # Localizar directamente los enlaces dentro de <ul class="ep">
+        elementos_a = driver.find_elements(By.CSS_SELECTOR, "ul.ep a")
+        print(f"🔎 Episodios encontrados: {len(elementos_a)}")
+
+        episodios = []
+
+        for elemento in elementos_a:
+            try:
+                # Extraer la etiqueta <i> dentro del <span> donde viene el número de episodio
+                etiqueta_ep = elemento.find_element(By.CSS_SELECTOR, "span i")
+                texto_episodio = etiqueta_ep.text.strip()
+
+                match = re.search(
+                    r"Episodio\s+(\d+)", texto_episodio, re.IGNORECASE
+                )
+                if not match:
+                    continue
+
+                numero = int(match.group(1))
+
+                # Selenium transforma automáticamente las URLs relativas a absolutas con get_attribute("href")
+                enlace = elemento.get_attribute("href")
+
+                if not enlace:
+                    continue
+
+                episodios.append({"episodio": numero, "url": enlace})
+                print(f"🎬 Episodio {numero}: {enlace}")
+
+            except Exception:
+                # Omitir elementos si difieren de la estructura requerida
+                continue
+
+        # --------------------------------------------------
+        # Obtener el episodio más reciente (mayor número)
+        # --------------------------------------------------
+        if not episodios:
+            print("❌ No se encontraron episodios válidos.")
+            return None
+
+        ultimo = max(episodios, key=lambda x: x["episodio"])
+
+        print(f"✅ Último episodio encontrado: {ultimo['episodio']}")
+        print(f"🔗 URL: {ultimo['url']}")
+
+        return ultimo
+
+    except Exception as e:
+        print(f"❌ Error procesando episodios con Selenium: {e}")
+        return None
+
+
+def buscar_episodio(driver, url_anime, numero_episodio_buscado, max_intentos=3):
+    """Busca un episodio específico de un anime en la página web usando exclusivamente Selenium."""
+
+    if not url_anime:
+        logging.error("❌ URL del anime vacía.")
+        return None
+
+    logging.info(
+        f"📺 Consultando episodios para: {url_anime} (Buscando episodio {numero_episodio_buscado})"
+    )
+
+    # --------------------------------------------------
+    # Conexión y carga con Selenium (con reintentos)
+    # --------------------------------------------------
+    cargado_exitoso = False
+
+    for intento in range(1, max_intentos + 1):
+        try:
+            driver.get(url_anime)
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "ul.ep li"))
+            )
+            cargado_exitoso = True
+            break
+        except Exception as e:
+            logging.warning(
+                f"⚠️ Error cargando la página (intento {intento}/{max_intentos}): {e}"
+            )
+            if intento < max_intentos:
+                logging.info("🔄 Reintentando...")
+                time.sleep(2)
+            else:
+                logging.error(
+                    "❌ No se pudo acceder a la página tras varios intentos."
+                )
+                return None
+
+    if not cargado_exitoso:
+        return None
+
+    # --------------------------------------------------
+    # Buscar el episodio exacto mediante Selenium
+    # --------------------------------------------------
+    try:
+        elementos_a = driver.find_elements(By.CSS_SELECTOR, "ul.ep a")
+        logging.info(
+            f"🔎 Analizando {len(elementos_a)} elementos en la lista de episodios..."
+        )
+
+        for elemento in elementos_a:
+            try:
+                # Extrae el texto dentro de <i> dentro de <span> ("Episodio 11")
+                etiqueta_ep = elemento.find_element(By.CSS_SELECTOR, "span i")
+                texto_episodio = etiqueta_ep.text.strip()
+
+                match = re.search(
+                    r"Episodio\s+(\d+)", texto_episodio, re.IGNORECASE
+                )
+
+                if not match:
+                    continue
+
+                numero = int(match.group(1))
+
+                # Si coincide el número, obtenemos el enlace absoluto
+                if numero == int(numero_episodio_buscado):
+                    enlace = elemento.get_attribute("href")
+
+                    if not enlace:
+                        continue
+
+                    logging.info(f"✅ ¡Episodio {numero} encontrado!")
+                    logging.info(f"🔗 URL: {enlace}")
+
+                    return {"episodio": numero, "url": enlace}
+
+            except Exception:
+                # Si algún elemento de la lista no cumple la estructura, pasa al siguiente
+                continue
+
+        logging.error(
+            f"❌ No se encontró el episodio {numero_episodio_buscado}."
+        )
+        return None
+
+    except Exception as e:
+        logging.error(f"❌ Error procesando episodios con Selenium: {e}")
+        return None
+
+
+# Servidores permitidos/prioritarios (puedes ajustar esta lista)
+SERVIDORES_ACEPTADOS = ["voe", "doodstream", "mixdrop", "mega", "mediafire"]
+
+
+def obtener_y_filtrar_servidores(
+    driver, url_episodio, servidores_permitidos=None
+):
+    """Navega al episodio, obtiene todos los servidores y los filtra."""
+    if servidores_permitidos is None:
+        servidores_permitidos = SERVIDORES_ACEPTADOS
+
+    # 1. Extraer todos los servidores presentes en la página del episodio
+    todos_los_servidores = buscar_enlace_descarga_y_actualizar(driver, url_episodio)
+
+    if not todos_los_servidores:
+        logging.warning(
+            f"⚠️ No se encontraron servidores en la URL: {url_episodio}"
+        )
+        return []
+
+    # 2. Aplicar filtro por los servidores deseados
+    servidores_filtrados = [
+        s
+        for s in todos_los_servidores
+        if s.get("servidor", "").lower()
+        in [srv.lower() for srv in servidores_permitidos]
+    ]
+
+    logging.info(
+        f"🎯 Servidores encontrados: {len(todos_los_servidores)} | "
+        f"Filtrados válidos ({'/'.join(servidores_permitidos)}): {len(servidores_filtrados)}"
+    )
+
+    return servidores_filtrados
+
+
+def buscar_videos_animeflv(driver, url, animes):
+    """Coordina la búsqueda en AnimeFLV e integra la extracción y filtrado de servidores de descarga."""
+    logging.info(f"🔍 Buscando videos en: {url}")
     resultados = []
 
     for anime in animes:
-
-        nombre_anime = anime['nombre']
-        episodio_buscado = anime['episodio_buscado']
+        nombre = anime["nombre"]
+        episodio_buscado = anime.get("episodio_buscado")
 
         logging.info("\n" + "=" * 60)
-        logging.info(f"📺 Anime: {nombre_anime}")
+        logging.info(f"📺 Anime: {nombre}")
         logging.info(f"🎯 Episodio buscado: {episodio_buscado}")
         logging.info("=" * 60)
+
+        url_episodio = None
+        episodio_confirmado = episodio_buscado
 
         # ---------------------------------------------
         # 1. Buscar en página principal
         # ---------------------------------------------
+        resultado_principal = buscar_pagina_principal(driver, url, anime)
 
-        resultado = buscar_pagina_principal(
-            url,
-            anime
-        )
+        if resultado_principal:
+            # Si se encontró en la principal, extraemos la URL del primer resultado
+            url_episodio = resultado_principal[0].get("enlace")
+            logging.info(
+                f"✅ Encontrado en página principal: {url_episodio}"
+            )
 
-        if resultado:
-            for item in resultado:
-                url_episodio = item.get('enlace')
-                links_descarga = buscar_boton_descarga(
-                    driver, url_episodio) if url_episodio else []
+        # --------------------------------------------------
+        # 2. Buscar página específica del anime (si no estaba en la principal)
+        # --------------------------------------------------
+        if not url_episodio:
+            logging.info(
+                "ℹ️ No encontrado en página principal. Buscando en perfil del anime..."
+            )
+            url_anime = buscar_y_obtener_url_anime(driver, nombre)
 
-                # Guardar todos los enlaces de descarga disponibles sin filtrar
-                enlace_principal = links_descarga if links_descarga else []
+            ultimo = obtener_ultimo_episodio(driver, url_anime)
 
-                # Si falla todo, usar la URL genérica del episodio
-                if not enlace_principal:
-                    enlace_principal = url_episodio
+            if not ultimo:
+                logging.error(
+                    f"❌ No se pudieron obtener episodios de {nombre}"
+                )
+                continue
 
-                # Estructura limpia compatible con tu función de nube
-                item_estructurado = {
-                    "nombre": item.get('nombre', nombre_anime),
-                    "nombre_anime": nombre_anime,
-                    "enlace": url_episodio,
-                    "episodio": item.get('episodio', episodio_buscado),
-                    "episodio_buscado": episodio_buscado,
-                    "fuente": "AnimeFLV",
-                    # <--- Aquí va el enlace seleccionado automáticamente
-                    "link_descarga": enlace_principal,
-                }
+            ultimo_episodio = ultimo["episodio"]
+            logging.info(
+                f"📊 Último disponible: {ultimo_episodio} | Buscado: {episodio_buscado}"
+            )
 
-                resultados.append(item_estructurado)
-            else:
+            # Comprobar si aún no se ha estrenado
+            if (
+                episodio_buscado is not None
+                and ultimo_episodio < episodio_buscado
+            ):
                 logging.info(
-                    f"ℹ️ No encontrado en página principal: {nombre_anime}")
-            continue
+                    f"⏳ Todavía no salió el episodio {episodio_buscado}."
+                )
+                continue
+
+            # Si el último es exactamente el buscado
+            if ultimo_episodio == episodio_buscado:
+                url_episodio = ultimo["url"]
+                logging.info(f"✅ Episodio {episodio_buscado} localizado.")
+
+            # Si el último es mayor, buscamos el episodio exacto
+            elif ultimo_episodio > episodio_buscado:
+                logging.info(
+                    f"ℹ️ El último es {ultimo_episodio}. Buscando episodio {episodio_buscado}..."
+                )
+                especifico = buscar_episodio(
+                    driver, url_anime, episodio_buscado
+                )
+
+                if especifico:
+                    url_episodio = especifico["url"]
+                    logging.info(
+                        f"✅ Episodio específico {episodio_buscado} localizado."
+                    )
+                else:
+                    logging.error(
+                        f"❌ No se pudo encontrar el enlace para el episodio {episodio_buscado}."
+                    )
+                    continue
+
+        # --------------------------------------------------
+        # 3. EXTRAER Y FILTRAR SERVIDORES DE DESCARGA
+        # --------------------------------------------------
+        if url_episodio:
+            links_descarga = buscar_boton_descarga(driver, url_episodio)
+
+            # Filtrar enlaces según los servidores aceptados
+            servidores_validos = [
+                s
+                for s in links_descarga
+                if s.get("servidor", "").lower()
+                in [srv.lower() for srv in SERVIDORES_ACEPTADOS]
+            ]
+
+            # Asignar servidor prioritario (o primer disponible si no coincide el filtro)
+            if servidores_validos:
+                enlace_principal = servidores_validos[0]["enlace"]
+            elif links_descarga:
+                enlace_principal = links_descarga[0]["enlace"]
+            else:
+                enlace_principal = url_episodio
+
+            resultado_anime = {
+                "nombre": f"{nombre_anime} Episodio {episodio_confirmado}",
+                "nombre_anime": nombre_anime,
+                "enlace": url_episodio,
+                "episodio": episodio_confirmado,
+                "episodio_buscado": episodio_buscado,
+                "fuente": "AnimeFLV",
+                "link_descarga": enlace_principal,
+                "servidores": servidores_validos,
+            }
+
+            resultados.append(resultado_anime)
+            logging.info(
+                f"🚀 Agregado exitosamente con {len(servidores_validos)} servidor(es) filtrado(s)."
+            )
 
     return resultados
 
@@ -448,13 +730,13 @@ if __name__ == "__main__":
     animes = [
         {
             "nombre": "Otome Kaijuu Carameliser",
-            "episodio_actual": 10,
+            "episodio_actual": 11,
             "episodios_totales": 12,
             "pendientes": 1,
-            "episodio_buscado": 11
+            "episodio_buscado": 12
         },
         {
-            "nombre": "Super no Ura de Yani Suu Futaria",
+            "nombre": "Super no Ura de Yani Suu Futari",
             "episodio_actual": 9,
             "episodios_totales": 12,
             "pendientes": 1,
@@ -463,82 +745,128 @@ if __name__ == "__main__":
     ]
 
     driver = configurar_navegador(DOWNLOAD_DIR, visor=True)
+    SERVIDORES_ACEPTADOS = ["voe", "doodstream", "mixdrop", "mega", "mediafire"]
 
     try:
         descargados = []
 
         for anime in animes:
-            nombre_anime = anime['nombre']
-            episodio_buscado = anime['episodio_buscado']
+            nombre_anime = anime["nombre"]
+            episodio_buscado = anime["episodio_buscado"]
 
-            print(f"\n============================================================")
             print(
-                f"🔎 Procesando: {nombre_anime} | Episodio: {episodio_buscado}")
-            print(f"============================================================")
+                f"\n============================================================"
+            )
+            print(
+                f"🔎 Procesando: {nombre_anime} | Episodio: {episodio_buscado}"
+            )
+            print(
+                f"============================================================"
+            )
 
-            #resultado = buscar_pagina_principal(driver, URL_TIOANIME, anime)
-            resultado = buscar_y_obtener_url_anime(driver, anime["nombre"])
+            url_episodio = None
+            episodio_confirmado = episodio_buscado
 
-        if resultado:
-            for item in resultado:
-                url_episodio = item.get('enlace')
+            # --------------------------------------------------
+            # 1. Buscar en página principal
+            # --------------------------------------------------
+            resultado = buscar_pagina_principal(driver, URL_TIOANIME, anime)
 
-                # Extraer todos los enlaces de descarga disponibles
-                links_descarga = (
-                    buscar_boton_descarga(driver, url_episodio) if url_episodio else []
+            if resultado:
+                item_principal = resultado[0]
+                url_episodio = item_principal.get("enlace")
+                episodio_confirmado = item_principal.get(
+                    "episodio", episodio_buscado
+                )
+                logging.info(f"✅ Encontrado en página principal: {url_episodio}")
+            else:
+                logging.info(
+                    f"ℹ️ No encontrado en página principal: {nombre_anime}. Intentando búsqueda en perfil..."
                 )
 
-                # Definir los servidores requeridos
-                servidores_permitidos = ['voe', 'doodstream', 'mixdrop']
+                # --------------------------------------------------
+                # 2. Fallback: Búsqueda específica en el perfil
+                # --------------------------------------------------
+                url_anime = buscar_y_obtener_url_anime(driver, nombre_anime)
 
-                # Filtrar conservando únicamente Voe, Doodstream y Mixdrop
-                links_filtrados = (
-                    [
-                        d
-                        for d in links_descarga
-                        if d.get('servidor', '').lower() in servidores_permitidos
-                    ]
-                    if links_descarga
-                    else []
-                )
+                if url_anime:
+                    ultimo = obtener_ultimo_episodio(driver, url_anime)
 
-                # Estructura limpia con los servidores seleccionados
+                    if ultimo:
+                        ultimo_ep = ultimo["episodio"]
+
+                        if (
+                            episodio_buscado is not None
+                            and ultimo_ep < episodio_buscado
+                        ):
+                            logging.info(
+                                f"⏳ El episodio {episodio_buscado} de {nombre_anime} aún no se estrena."
+                            )
+                            continue
+
+                        if ultimo_ep == episodio_buscado:
+                            url_episodio = ultimo["url"]
+                        elif ultimo_ep > episodio_buscado:
+                            especifico = buscar_episodio(
+                                driver, url_anime, episodio_buscado
+                            )
+                            if especifico:
+                                url_episodio = especifico["url"]
+
+            # --------------------------------------------------
+            # 3. Extraer y filtrar enlaces de descarga
+            # --------------------------------------------------
+            if url_episodio:
+                links_descarga = buscar_boton_descarga(driver, url_episodio)
+
+                # Filtrar enlaces según los servidores aceptados
+                servidores_validos = [
+                    s
+                    for s in links_descarga
+                    if s.get("servidor", "").lower()
+                    in [srv.lower() for srv in SERVIDORES_ACEPTADOS]
+                ]
+
+                # Asignar servidor prioritario (o primer disponible si no coincide el filtro)
+                if servidores_validos:
+                    enlace_principal = servidores_validos[0]["enlace"]
+                elif links_descarga:
+                    enlace_principal = links_descarga[0]["enlace"]
+                else:
+                    enlace_principal = url_episodio
+
                 item_estructurado = {
-                    "nombre": item.get('nombre', nombre_anime),
+                    "nombre": f"{nombre_anime} Episodio {episodio_confirmado}",
                     "nombre_anime": nombre_anime,
                     "enlace": url_episodio,
-                    "episodio": item.get('episodio', episodio_buscado),
+                    "episodio": episodio_confirmado,
                     "episodio_buscado": episodio_buscado,
-                    "fuente": "JKAnime",
-                    "links_descarga": links_filtrados,
+                    "fuente": "AnimeFLV",
+                    "link_descarga": enlace_principal,
+                    "servidores": servidores_validos,
                 }
 
                 descargados.append(item_estructurado)
-        else:
-            logging.info(f"ℹ️ No encontrado en página principal: {nombre_anime}")
+                logging.info(
+                    f"🚀 Agregado exitosamente | Link: {enlace_principal}"
+                )
+            else:
+                logging.error(
+                    f"❌ No se pudo obtener la URL del episodio para {nombre_anime}."
+                )
+
     finally:
         try:
             driver.quit()
             print("\n🔒 Driver principal cerrado correctamente.")
         except Exception as e:
             print(f"⚠️ Error al cerrar el driver: {e}")
-            
-    now = datetime.now().strftime("%H:%M:%S")
 
-    cant_res = len(resultado) if resultado else 0
-    cant_desc = len(descargados) if descargados else 0
-
-    print(
-        f"[{now}] 📊 RESULTADOS ({cant_res}):\n{json.dumps(resultado, indent=2, ensure_ascii=False)}"
-    )
-    print(
-        f"[{now}] 📥 DESCARGADOS ({cant_desc}):\n{json.dumps(descargados, indent=2, ensure_ascii=False)}"
-    )
-    '''
-    # Ejecutar tu función tal como la tienes definida
+    # Procesamiento en la nube
     if descargados:
         videos_finales = proceso_nube_buscar_y_guardar_sheets(
-            DOWNLOAD_DIR, descargados)
+            DOWNLOAD_DIR, descargados
+        )
     else:
         logging.error("❌ No hay elementos para procesar en la nube.")
-    '''
+        

@@ -269,7 +269,7 @@ def detectar_servidor_descarga(driver):
         return "streamtape"
     if "voe.sx" in url or "voe" in url:
         return "voe"
-    if "dood" in url or "doodstream" in url:
+    if "dood" in url or "doodstream" in url or "playmogo" in url:
         return "doodstream"
     if "mediafire.com" in url:
         return "mediafire"
@@ -292,7 +292,7 @@ def detectar_servidor_descarga(driver):
                     return "streamtape"
                 if "voe" in contenido_total:
                     return "voe"
-                if "dood" in contenido_total:
+                if "playmogo" in contenido_total:
                     return "doodstream"
                 if "mediafire" in contenido_total:
                     return "mediafire"
@@ -337,10 +337,14 @@ def encontrar_boton_descarga(driver, servidor):
             ),
         ],
 
-        "doodstream": [
+       "doodstream": [
             (
                 By.CSS_SELECTOR,
-                "a[href*='/download/']"
+                "a.download_vd"
+            ),
+            (
+                By.CSS_SELECTOR,
+                "a[href='#download_now']"
             ),
         ],
 
@@ -560,7 +564,7 @@ def descargar_video_con_reintentos(
         try:
 
             driver = configurar_navegador(
-                download_dir
+                download_dir, visor=True
             )
 
             if driver is None:
