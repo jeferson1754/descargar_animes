@@ -394,152 +394,140 @@ def encontrar_boton_descarga(driver, servidor):
 
 
 def hacer_click_en_boton_descarga(
-    driver,
-    enlace_descarga,
-    download_dir,
-    nombre_video
+    driver, enlace_descarga, download_dir, nombre_video
 ):
-    """
-    Inicia una descarga y espera hasta confirmar
+    """Inicia una descarga y espera hasta confirmar
+
     que apareció un archivo nuevo y terminó de crecer.
 
     Devuelve:
-        True  -> descarga confirmada
-        False -> descarga fallida
+        True            -> descarga confirmada
+        False           -> descarga fallida
+        "archivo_caido" -> el enlace ya no existe o fue eliminado
+        "cuota_agotada" -> límite de transferencia alcanzado (Mega)
     """
 
     try:
-
         # --------------------------------------------------
         # 1. Registrar archivos existentes ANTES
         # --------------------------------------------------
-
         archivos_antes = set(os.listdir(download_dir))
 
         logging.info(
-            f"\n🌐 Abriendo enlace de descarga para: "
-            f"{nombre_video}"
+            f"\n🌐 Abriendo enlace de descarga para: {nombre_video}"
         )
-
         driver.get(enlace_descarga)
-
         time.sleep(3)
 
         # --------------------------------------------------
         # 2. Detectar servidor
         # --------------------------------------------------
-
-        servidor = detectar_servidor_descarga(
-            driver
-        )
-
-        logging.info(
-            f"🌐 Servidor detectado: {servidor}"
-        )
+        servidor = detectar_servidor_descarga(driver)
+        logging.info(f"🌐 Servidor detectado: {servidor}")
 
         # --------------------------------------------------
-        # 3. Validación específica para MEGA (Errores comunes)
+        # 3. Validación previa para MEGA (Archivo caído)
         # --------------------------------------------------
-
         if servidor == "mega":
             logging.info("🔍 Verificando estado del archivo en Mega...")
             try:
-                # Damos un par de segundos por si Mega tarda en renderizar el aviso en pantalla
                 time.sleep(2)
-
                 texto_pagina = driver.page_source.lower()
 
-                # Verificamos si aparece el mensaje exacto o variaciones comunes
-                if "el archivo ya no está disponible" in texto_pagina or "file no longer available" in texto_pagina or "acceder al archivo" in texto_pagina:
-                    logging.error(f"❌ Error en Mega: El archivo ya no está disponible.")
-                    return "archivo_caido"
-
-                if "archivo no encontrado" in texto_pagina or "file not found" in texto_pagina:
+                if any(
+                    msg in texto_pagina
+                    for msg in [
+                        "el archivo ya no está disponible",
+                        "file no longer available",
+                        "acceder al archivo",
+                        "archivo no encontrado",
+                        "file not found",
+                    ]
+                ):
                     logging.error(
-                        f"❌ Error en Mega: El archivo no fue encontrado o fue eliminado.")
+                        "❌ Error en Mega: El archivo ya no está disponible o fue eliminado."
+                    )
                     return "archivo_caido"
-
-                '''
-                if texto_pagina or "bandwidth quota exceeded" in texto_pagina or "quota exceeded" in texto_pagina:
-                    logging.info(f"⚠️ Error en Mega: Se ha agotado la cuota de transferencia.")
-                    return "archivo_caido"
-                '''
 
             except Exception as e:
-                logging.error(f"⚠️ No se pudo verificar el estado de Mega: {e}")
+                logging.error(
+                    f"⚠️ No se pudo verificar la disponibilidad de Mega: {e}"
+                )
 
         # --------------------------------------------------
         # 4. Buscar botón correspondiente
         # --------------------------------------------------
-
-        boton_descarga = encontrar_boton_descarga(
-            driver,
-            servidor
-        )
+        boton_descarga = encontrar_boton_descarga(driver, servidor)
 
         if boton_descarga is None:
-
             logging.error(
-                f"❌ No se encontró botón "
-                f"de descarga para {nombre_video}"
+                f"❌ No se encontró botón de descarga para {nombre_video}"
             )
-
             return False
 
-        # -----------------------------------------
-        # Hacer clic
-        # -----------------------------------------
-
-        boton_descarga.click()
-
+        # --------------------------------------------------
+        # 5. Hacer clic (usando JavaScript para evadir bloqueos)
+        # --------------------------------------------------
+        driver.execute_script("arguments[0].click();", boton_descarga)
         logging.info(
-            f"⬇️ Descarga iniciada: {nombre_video}"
+            f"⬇️ Clic ejecutado. Iniciando verificación para: {nombre_video}"
         )
 
         # --------------------------------------------------
-        # 5. Esperar confirmación REAL
+        # 6. Verificación POST-CLIC para MEGA (Cuota Agotada)
         # --------------------------------------------------
+        if servidor == "mega":
+            try:
+                # Espera dinámica de hasta 5 segundos para la aparición del modal de cuota
+                modal_cuota = WebDriverWait(driver, 30).until(
+                    EC.visibility_of_element_located(
+                        (
+                            By.CSS_SELECTOR,
+                            ".quota-dialog.transfer-quota.active",
+                        )
+                    )
+                )
 
+                if modal_cuota and modal_cuota.is_displayed():
+                    logging.warning(
+                        "⚠️ Error en Mega: Se ha agotado la cuota de transferencia tras presionar descargar."
+                    )
+                    return "cuota_agotada"
+
+            except Exception:
+                # Si expira el tiempo de espera, el modal no apareció (descarga correcta)
+                logging.info(
+                    "✅ Sin bloqueos de cuota detectados en MEGA. Procesando archivo..."
+                )
+
+        # --------------------------------------------------
+        # 7. Esperar confirmación REAL del archivo en disco
+        # --------------------------------------------------
         archivo_descargado = verificar_descarga(
             download_dir=download_dir,
             archivos_antes=archivos_antes,
             tiempo_maximo=900,
             intervalo=2,
-            tiempo_estable=6
+            tiempo_estable=6,
         )
 
         # --------------------------------------------------
-        # 6. Resultado
+        # 8. Resultado final
         # --------------------------------------------------
-
         if archivo_descargado:
-
+            logging.info(f"✅ DESCARGA COMPLETADA: {nombre_video}")
             logging.info(
-                f"✅ DESCARGA COMPLETADA: "
-                f"{nombre_video}"
+                f"📁 Archivo: {os.path.basename(archivo_descargado)}"
             )
-
-            logging.info(
-                f"📁 Archivo: "
-                f"{os.path.basename(archivo_descargado)}"
-            )
-
             return True
 
         logging.error(
-            f"❌ La descarga NO pudo confirmarse: "
-            f"{nombre_video}"
+            f"❌ La descarga NO pudo confirmarse: {nombre_video}"
         )
-
         return False
 
     except Exception as e:
-
-        logging.error(
-            f"❌ Error descargando "
-            f"{nombre_video}: {e}"
-        )
-
+        logging.error(f"❌ Error descargando {nombre_video}: {e}")
         return False
 
 
