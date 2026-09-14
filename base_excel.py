@@ -322,7 +322,8 @@ def actualizar_estado_google_sheets(
     nuevo_estado="Completado",
     nuevo_enlace=None,
     nueva_fuente=None,
-    fuentes_fallidas=None
+    fuentes_fallidas=None,
+    fecha_actualizacion=None
 ):
     """
     Busca un anime y episodio específico en Google Sheets y actualiza su estado, 
@@ -380,8 +381,10 @@ def actualizar_estado_google_sheets(
             fila_actual[3] = str(nueva_fuente)      # Col D: Fuente
         if fuentes_fallidas is not None:
             fila_actual[4] = str(fuentes_fallidas)  # Col E: Fuentes Fallidas
-
-        fila_actual[6] = tiempo_actual              # Col G: Fecha Actualización
+        
+        if fecha_actualizacion:
+                    fila_actual[6] = tiempo_actual
+                   # Col G: Fecha Actualización
         
         if nuevo_estado == "Completado":
             fila_actual[7] = tiempo_actual          # Col H: Fecha Descarga

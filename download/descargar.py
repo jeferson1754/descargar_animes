@@ -14,7 +14,7 @@ from animes.buscador import buscar_en_fuentes
 from config import FUENTES_ANIME, SERVIDOR
 from base_excel import obtener_conexion_google_sheets, guardar_y_actualizar_historial_sheets, leer_animes_pendientes, actualizar_estado_google_sheets, guardar_logs_en_sheets
 from notificaciones_telegram import enviar_mensaje_telegram
-
+from animes.comparador import tomar_captura_express
 
 def verificar_descarga(
     download_dir,
@@ -591,29 +591,13 @@ def hacer_click_en_boton_descarga(
         # --------------------------------------------------
         if servidor == "mega":
             logging.info("🔍 Verificando estado del archivo en Mega...")
-            try:
-                time.sleep(2)
-                texto_pagina = driver.page_source.lower()
-
-                if any(
-                    msg in texto_pagina
-                    for msg in [
-                        "el archivo ya no está disponible",
-                        "no se puede acceder al archivo",
-                        "acceder al archivo",
-                        "archivo no encontrado",
-                        "file not found",
-                    ]
-                ):
-                    logging.error(
-                        "❌ Error en Mega: El archivo ya no está disponible o fue eliminado."
-                    )
-                    return "archivo_caido"
-
-            except Exception as e:
+            
+            # Llamada a la función centralizada de validación
+            if not validar_enlace_mega(driver, enlace_descarga):
                 logging.error(
-                    f"⚠️ No se pudo verificar la disponibilidad de Mega: {e}"
+                    "❌ Error en Mega: El archivo ya no está disponible, fue eliminado o superó la cuota."
                 )
+                return "archivo_caido"
 
         # --------------------------------------------------
         # 4. Buscar botón correspondiente
@@ -925,7 +909,7 @@ def descargar_video_con_reintentos(
         try:
 
             driver = configurar_navegador(
-                download_dir, visor=True
+                download_dir
             )
 
             if driver is None:
@@ -1003,6 +987,7 @@ def validar_enlace_mega(driver, enlace):
     y con cuota de transferencia activa.
     Devuelve True si es válido, False si está caído.
     """
+    
     if not enlace or "mega.nz" not in enlace.lower():
         return True  # Si no es de Mega, lo damos por bueno por defecto
 
@@ -1014,10 +999,9 @@ def validar_enlace_mega(driver, enlace):
         # Si encuentra errores típicos de Mega, retorna False
         if any(error in texto_pagina for error in [
             "el archivo ya no está disponible",
-            "file no longer available",
             "archivo no encontrado",
-            "file not found",
-            "bandwidth quota exceeded"
+            "acceder al archivo",
+            "el archivo ya no"  
         ]):
             return False
 
@@ -1174,6 +1158,14 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
 
             # 1. Evaluamos la validación
             es_valido = validar_enlace_mega(driver, enlace_mega)
+            
+            tomar_captura_express(
+                url=enlace_mega, 
+                nombre_fuente="TioAnime", 
+                nombre_anime=video["nombre"], 
+                episodio=video["episodio_buscado"]
+            )
+
 
             if es_valido:
                 # Si es True: Lo marcamos como Pendiente y lo guardamos en la lista temporal
@@ -1402,6 +1394,7 @@ def proceso_local_descargar_archivos(download_dir):
                         nuevo_enlace=nuevo_link_descarga,
                         nueva_fuente=nueva_fuente_nombre,
                         fuentes_fallidas=nueva_cadena_fallidas,
+                        fecha_actualizacion=True,
                         nuevo_estado="Pendiente"
                     )
                     continue  # Vuelve a intentar la descarga con el nuevo enlace
@@ -1416,6 +1409,7 @@ def proceso_local_descargar_archivos(download_dir):
                         nombre_anime=nombre_servidor,
                         episodio=episodio_limpio,
                         fuentes_fallidas=nueva_cadena_fallidas,
+                        fecha_actualizacion=True,
                         nuevo_estado="Sin Fuentes"
                     )
 
