@@ -2,6 +2,7 @@ import time
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
 import os
 import logging
 # 📝 Exportar el valor de la variable a un archivo .txt de depuración
@@ -256,19 +257,27 @@ def detectar_servidor_descarga(driver):
     """
     Detecta el servidor analizando la URL, los atributos href y 
     el texto visible de los botones o enlaces en páginas intermedias.
-    """
+    """# Si le pasamos la URL directamente como texto (str)
+    if isinstance(driver, str):
+        url = driver.lower()
+    # Si le pasamos el objeto driver de Selenium
+    else:
+        url = driver.current_url.lower()
     
     # Dar un breve respiro para que carguen los elementos dinámicos de la página intermedia
     time.sleep(2)
-    url = driver.current_url.lower()
 
     # 1. Detección rápida por URL actual
     if "mega.nz" in url or "mega.co.nz" in url:
         return "mega"
     if "streamtape.com" in url:
         return "streamtape"
-    if "voe.sx" in url or "voe" in url:
+    if "voe.sx" in url or "voe" in url or "johnfullwonder" in url:
         return "voe"
+    if "miixdrop" in url:
+        return "mixdrop"
+    if "mp4upload.com" in url:
+        return "mp4upload"
     if "dood" in url or "doodstream" in url or "playmogo" in url:
         return "doodstream"
     if "mediafire.com" in url:
@@ -292,6 +301,10 @@ def detectar_servidor_descarga(driver):
                     return "streamtape"
                 if "voe" in contenido_total:
                     return "voe"
+                if "mixdrop" in contenido_total:
+                    return "mixdrop"
+                if "mp4upload" in contenido_total:
+                    return "mp4upload"
                 if "playmogo" in contenido_total:
                     return "doodstream"
                 if "mediafire" in contenido_total:
@@ -330,10 +343,42 @@ def encontrar_boton_descarga(driver, servidor):
             (By.CSS_SELECTOR, "a.popservers"),
             (By.CSS_SELECTOR, "a[aria-label*='Download file']")
         ],
-        "voe": [
+       "voe": [
+            (
+                By.CSS_SELECTOR,
+                "a.download-user-file"
+            ),
             (
                 By.CSS_SELECTOR,
                 "a[href*='download']"
+            ),
+            (
+                By.XPATH,
+                "//a[contains(text(), 'Descargar ahora')]"
+            ),
+        ],
+        "mixdrop": [
+            (
+                By.CSS_SELECTOR,
+                "a.download-btn"
+            ),
+            (
+                By.CSS_SELECTOR,
+                "a[href*='download']"
+            ),
+        ],
+        "mp4upload": [
+            (
+                By.ID,
+                "method_free"
+            ),
+            (
+                By.CSS_SELECTOR,
+                "input#method_free:not([disabled])"
+            ),
+            (
+                By.CSS_SELECTOR,
+                "input.downloadbtn"
             ),
         ],
 
@@ -353,7 +398,7 @@ def encontrar_boton_descarga(driver, servidor):
     if servidor not in selectores:
 
         logging.error(
-            f"⚠️ Servidor no reconocido: {servidor}"
+            f"⚠️ Boton no encontrado o reconocido: {servidor}"
         )
 
         return None
@@ -392,6 +437,35 @@ def encontrar_boton_descarga(driver, servidor):
 
     return None
 
+def asegurar_permanencia_en_servidor(driver, enlace_descarga, servidor_esperado):
+    """Verifica si el navegador fue redirigido a un sitio publicitario
+
+    y fuerza el regreso al enlace original de descarga.
+    """
+    time.sleep(4)  # Tiempo de espera para detectar si salta la redirección
+
+    url_actual = driver.current_url.lower()
+
+    # Dominios o patrones de sitios publicitarios conocidos
+    dominios_basura = [
+        "signaldefendgo",
+        "bdsclk",
+        "pets/rabbits",
+        "clickid=",
+        "track",
+    ]
+
+    # Si la URL actual no contiene el servidor esperado o contiene un patrón de anuncio
+    es_basura = any(basura in url_actual for basura in dominios_basura)
+    es_servidor_correcto = servidor_esperado in url_actual
+
+    if es_basura or not es_servidor_correcto:
+        logging.warning(
+            f"⚠️ Redirección publicitaria detectada ({url_actual[:40]}...). Recargando enlace original..."
+        )
+        driver.get(enlace_descarga)
+        time.sleep(3)
+
 
 def hacer_click_en_boton_descarga(
     driver, enlace_descarga, download_dir, nombre_video
@@ -406,24 +480,73 @@ def hacer_click_en_boton_descarga(
         "archivo_caido" -> el enlace ya no existe o fue eliminado
         "cuota_agotada" -> límite de transferencia alcanzado (Mega)
     """
+    def cerrar_pestañas_publicitarias(driver, ventana_principal):
+        """Cierra cualquier pestaña/ventana emergente (pop-up) que no sea la principal."""
+        try:
+            time.sleep(1)
+            pestañas_actuales = driver.window_handles
+            if len(pestañas_actuales) > 1:
+                for handle in pestañas_actuales:
+                    if handle != ventana_principal:
+                        driver.switch_to.window(handle)
+                        driver.close()
+                        logging.info("🧹 Pop-up/Anuncio cerrado.")
+                driver.switch_to.window(ventana_principal)
+        except Exception as e:
+            logging.warning(f"⚠️ No se pudo limpiar emergentes: {e}")
+            driver.switch_to.window(ventana_principal)
+
 
     try:
         # --------------------------------------------------
         # 1. Registrar archivos existentes ANTES
         # --------------------------------------------------
+      # --------------------------------------------------
+        # 1. Registrar archivos existentes ANTES
+        # --------------------------------------------------
         archivos_antes = set(os.listdir(download_dir))
+
+        # --------------------------------------------------
+        # 2. Detectar servidor desde el STRING de la URL primero
+        # --------------------------------------------------
+        # Pasamos enlace_descarga (el string) para saber qué servidor es ANTES de que el navegador cambie de sitio
+        servidor = detectar_servidor_descarga(enlace_descarga)
+        logging.info(f"🌐 Servidor detectado: {servidor}")
 
         logging.info(
             f"\n🌐 Abriendo enlace de descarga para: {nombre_video}"
         )
         driver.get(enlace_descarga)
-        time.sleep(3)
 
         # --------------------------------------------------
-        # 2. Detectar servidor
+        # 2b. Guardián Anti-Redirección Prematura
         # --------------------------------------------------
-        servidor = detectar_servidor_descarga(driver)
-        logging.info(f"🌐 Servidor detectado: {servidor}")
+        # Evita que el JS de la página secuestre la pestaña durante la carga inicial
+        for reintento in range(3):
+            time.sleep(2)
+            url_actual = driver.current_url.lower()
+
+            # Dominios o palabras clave de publicidad agresiva
+            es_publicidad = any(
+                p in url_actual
+                for p in [
+                    "signaldefendgo",
+                    "clickid=",
+                    "pets/rabbits",
+                    "bdsclk",
+                    "trk=",
+                    "redirect",
+                ]
+            )
+
+            # Si la URL no contiene el nombre del servidor o cayó en publicidad
+            if es_publicidad or (servidor and servidor not in url_actual):
+                logging.warning(
+                    f"⚠️ Se detectó redirección publicitaria prematura ({url_actual[:45]}...). Volviendo a cargar enlace..."
+                )
+                driver.get(enlace_descarga)
+            else:
+                break
 
         # --------------------------------------------------
         # 3. Validación previa para MEGA (Archivo caído)
@@ -438,7 +561,7 @@ def hacer_click_en_boton_descarga(
                     msg in texto_pagina
                     for msg in [
                         "el archivo ya no está disponible",
-                        "file no longer available",
+                        "no se puede acceder al archivo",
                         "acceder al archivo",
                         "archivo no encontrado",
                         "file not found",
@@ -468,10 +591,222 @@ def hacer_click_en_boton_descarga(
         # --------------------------------------------------
         # 5. Hacer clic (usando JavaScript para evadir bloqueos)
         # --------------------------------------------------
+        ventana_principal = driver.current_window_handle
         driver.execute_script("arguments[0].click();", boton_descarga)
         logging.info(
             f"⬇️ Clic ejecutado. Iniciando verificación para: {nombre_video}"
         )
+        cerrar_pestañas_publicitarias(driver, ventana_principal)
+        
+        # --------------------------------------------------
+        # 5b. Flujo multipasos (Exclusivo para MIXDROP)
+        # --------------------------------------------------
+        # --------------------------------------------------
+        # 4. Flujo exclusivo para MIXDROP (Bucle hasta obtener href)
+        # --------------------------------------------------
+        # --------------------------------------------------
+        # Flujo exclusivo para MP4UPLOAD
+        # --------------------------------------------------
+        # --------------------------------------------------
+        # Flujo exclusivo para MP4UPLOAD
+        # --------------------------------------------------
+        if servidor == "mp4upload":
+            logging.info(
+                "🔄 Procesando Mp4Upload: Esperando habilitación del botón..."
+            )
+
+            # Control anti-redirección inicial
+            asegurar_permanencia_en_servidor(
+                driver, enlace_descarga, "mp4upload"
+            )
+
+            try:
+            # --------------------------------------------------
+                # --------------------------------------------------
+                # 2. PASO 2: Extraer enlace directo o limpiar superposiciones
+                # --------------------------------------------------
+                logging.info(
+                    "⏳ Esperando la segunda página de Mp4Upload..."
+                )
+
+                boton_final = WebDriverWait(driver, 20).until(
+                    EC.presence_of_element_located((By.ID, "downloadbtn"))
+                )
+
+                # Opción A: Intentar extraer la URL directa de descarga del botón o su contenedor
+                url_directa = None
+                try:
+                    url_directa = boton_final.get_attribute("href")
+                    if not url_directa:
+                        # Buscar si el botón está envuelto en un tag <a> o dentro de un <form>
+                        padre_a = driver.find_elements(
+                            By.XPATH, "//a[button[@id='downloadbtn']]"
+                        )
+                        if padre_a:
+                            url_directa = padre_a[0].get_attribute("href")
+                except Exception:
+                    pass
+
+                # Si encontramos la URL directa del video/archivo, forzamos la descarga directamente
+                if url_directa and (
+                    "mp4" in url_directa
+                    or "download" in url_directa
+                    or "d1." in url_directa
+                ):
+                    logging.info(
+                        f"🔗 Enlace directo extraído con éxito. Forzando navegación..."
+                    )
+                    driver.get(url_directa)
+
+                else:
+                    # Opción B: Destruir overlays publicitarios invisibles y hacer clic limpio
+                    logging.info(
+                        "🛡️ Removiendo capas publicitarias invisibles..."
+                    )
+                    driver.execute_script(
+                        """
+                        // Eliminar div/iframes transparentes flotantes que secuestran el clic
+                        document.querySelectorAll('div, iframe, a').forEach(el => {
+                            let style = window.getComputedStyle(el);
+                            if ((style.position === 'fixed' || style.position === 'absolute') && parseInt(style.zIndex) > 10) {
+                                el.remove();
+                            }
+                        });
+                        // Desvincular eventos onclick publicitarios del botón
+                        let btn = document.getElementById('downloadbtn');
+                        if (btn) btn.onclick = null;
+                    """
+                    )
+                    time.sleep(1)
+
+                    # Forzar la ejecución del envío o clic por JS nativo
+                    logging.info("⬇️ Disparando descarga mediante evento JS...")
+                    driver.execute_script("arguments[0].click();", boton_final)
+
+
+                cerrar_pestañas_publicitarias(driver, ventana_principal)
+
+            except Exception as e:
+                logging.error(f"❌ Error durante el proceso en Mp4Upload: {e}")
+                return False
+        
+        # --------------------------------------------------
+        # Flujo blindado para VOE (2 Pasos)
+        # --------------------------------------------------
+        if servidor == "voe":
+            logging.info("🔄 Procesando VOE: Buscando primer botón...")
+
+            try:
+                # --------------------------------------------------
+                # PASO 1: Primer botón ("Descargar ahora")
+                # --------------------------------------------------
+                boton_paso1 = WebDriverWait(driver, 20).until(
+                    EC.presence_of_element_located((
+                        By.CSS_SELECTOR,
+                        "a.download-user-file, a[href*='download']",
+                    ))
+                )
+
+                # TÁCTICA ANTI-ANUNCIOS: Extraer URL directa para saltarse la capa JS publicitaria
+                url_paso1 = boton_paso1.get_attribute("href")
+
+                if url_paso1 and "http" in url_paso1:
+                    logging.info(
+                        "🔗 Extrayendo enlace directo del paso 1. Navegando sin clics publicitarios..."
+                    )
+                    driver.get(url_paso1)
+                else:
+                    # Si no hay href accesible, destruir overlays y hacer clic por JS
+                    driver.execute_script(
+                        """
+                        document.querySelectorAll('div, iframe, a').forEach(el => {
+                            let style = window.getComputedStyle(el);
+                            if ((style.position === 'fixed' || style.position === 'absolute') && parseInt(style.zIndex) > 10) {
+                                el.remove();
+                            }
+                        });
+                    """
+                    )
+                    driver.execute_script("arguments[0].click();", boton_paso1)
+
+                cerrar_pestañas_publicitarias(driver, ventana_principal)
+                time.sleep(2)
+
+            except Exception as e:
+                logging.error(f"❌ Error durante el proceso en VOE: {e}")
+                return False
+        
+        if servidor == "mixdrop":
+            logging.info(
+                "🔄 Procesando Mixdrop: Esperando generación de href..."
+            )
+
+            href_final = None
+            max_intentos = 6
+
+            for intento in range(1, max_intentos + 1):
+                try:
+                    # Buscar botones con la clase de descarga de Mixdrop
+                    botones = driver.find_elements(
+                        By.CSS_SELECTOR, "a.download-btn"
+                    )
+
+                    for btn in botones:
+                        url_href = btn.get_attribute("href")
+                        # Si ya se generó el href (Botón 3), guardarlo y salir del bucle
+                        if url_href and "http" in url_href:
+                            href_final = url_href
+                            logging.info(
+                                f"🎯 ¡Enlace de descarga obtenido en intento {intento}!: {href_final}"
+                            )
+                            break
+
+                    if href_final:
+                        break
+
+                    logging.info(
+                        f"⏳ Intento {intento}/{max_intentos}: Hhref no detectado. Presionando Botón 2 con eventos reales..."
+                    )
+
+                    if botones:
+                        boton_actual = botones[0]
+
+                        # Clic simulado con movimiento de ratón real
+                        try:
+                            actions = ActionChains(driver)
+                            actions.move_to_element(
+                                boton_actual
+                            ).click().perform()
+                        except Exception:
+                            # Respaldo por eventos de mouse JS si ActionChains falla
+                            driver.execute_script(
+                                """
+                                var el = arguments[0];
+                                var evObj = document.createEvent('MouseEvents');
+                                evObj.initEvent('click', true, true);
+                                el.dispatchEvent(evObj);
+                            """,
+                                boton_actual,
+                            )
+
+                    cerrar_pestañas_publicitarias(driver, ventana_principal)
+                    time.sleep(3)  # Tiempo para la animación / temporizador
+
+                except Exception as e:
+                    logging.warning(f"⚠️ Error interactuando con Mixdrop: {e}")
+                    time.sleep(2)
+
+            # Ejecutar descarga usando el href obtenido
+            if href_final:
+                logging.info(
+                    "⬇️ Navegando / ejecutando clic directo en el archivo de Mixdrop..."
+                )
+                driver.get(href_final)
+            else:
+                logging.error(
+                    "❌ No se logró generar el enlace 'href' en Mixdrop."
+                )
+                return False
 
         # --------------------------------------------------
         # 6. Verificación POST-CLIC para MEGA (Cuota Agotada)
