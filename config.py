@@ -1,6 +1,6 @@
 from fuentes.tioanime import buscar_videos_tioanime
 from fuentes.jkanime import buscar_videos_jkanime
-#from fuentes.animeflv import buscar_videos_animeflv
+from fuentes.animeflv import buscar_videos_animeflv
 
 
 # ============================================================
@@ -24,6 +24,12 @@ FUENTES_ANIME = [
         "url": "https://tioanime.com/",
         "activa": True,
         "buscar": buscar_videos_tioanime
+    },
+    {
+        "nombre": "AnimeFLV",
+        "url": "https://www.animeflv.one",
+        "activa": True,
+        "buscar": buscar_videos_animeflv
     },
     {
         "nombre": "Jkanime",

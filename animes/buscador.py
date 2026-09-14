@@ -7,7 +7,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from utilidades.navegador import configurar_navegador
-from config import DOWNLOAD_DIR
 
 
 def extraer_nombres_anime(url, download_dir):
@@ -105,7 +104,7 @@ def extraer_nombres_anime(url, download_dir):
     finally:
         driver.quit()
 
-def buscar_en_fuentes(animes, fuentes, excluir_fuente=None):
+def buscar_en_fuentes(animes, fuentes, excluir_fuente=None, download_dir=None):
     """
     Busca cada anime en las fuentes disponibles.
     Prueba las fuentes en orden hasta encontrar el episodio solicitado.
@@ -124,7 +123,7 @@ def buscar_en_fuentes(animes, fuentes, excluir_fuente=None):
     resultados = []
 
     for anime in animes:
-        driver_capitulos = configurar_navegador(DOWNLOAD_DIR)
+        driver_capitulos = configurar_navegador(download_dir)
 
         nombre = anime.get("nombre")
         episodio_buscado = anime.get("episodio_buscado")

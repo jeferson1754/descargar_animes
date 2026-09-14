@@ -1,10 +1,4 @@
-import os
-import sys
 
-# Sube un nivel desde la carpeta /fuentes a la raíz del proyecto
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from download.descargar import proceso_nube_buscar_y_guardar_sheets
 from animes.comparador import tomar_captura_express
 from utilidades.archivos import normalizar_nombre
 from selenium.webdriver.support import expected_conditions as EC
@@ -20,13 +14,9 @@ import unicodedata
 import logging
 import re
 from utilidades.navegador import configurar_navegador
-from config import DOWNLOAD_DIR
 from datetime import datetime
 import json
-import os
-import sys
-# Sube un nivel desde la carpeta /fuentes a la raíz del proyecto
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 
 
 # pruebas_tioanime.py
@@ -708,8 +698,8 @@ def buscar_videos_animeflv(driver, url, animes):
                 enlace_principal = url_episodio
 
             resultado_anime = {
-                "nombre": f"{nombre_anime} Episodio {episodio_confirmado}",
-                "nombre_anime": nombre_anime,
+                "nombre": f"{nombre} Episodio {episodio_confirmado}",
+                "nombre_anime": nombre,
                 "enlace": url_episodio,
                 "episodio": episodio_confirmado,
                 "episodio_buscado": episodio_buscado,
@@ -725,7 +715,7 @@ def buscar_videos_animeflv(driver, url, animes):
 
     return resultados
 
-
+'''
 if __name__ == "__main__":
     animes = [
         {
@@ -870,3 +860,4 @@ if __name__ == "__main__":
     else:
         logging.error("❌ No hay elementos para procesar en la nube.")
         
+'''

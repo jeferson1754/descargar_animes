@@ -1052,7 +1052,8 @@ def flujo_descarga_animes(file_name, download_dir):
     logging.info("Buscando videos relacionados...")
     videos_encontrados = buscar_en_fuentes(
         animes_a_buscar,
-        FUENTES_ANIME
+        FUENTES_ANIME,
+        download_dir=download_dir
     )
 
     with open("videos_encontrados.txt", "w", encoding="utf-8") as archivo_txt:
@@ -1284,7 +1285,8 @@ def proceso_local_descargar_archivos(download_dir):
                 nuevo_video_encontrado = buscar_en_fuentes(
                     [{"nombre": nombre_servidor, "episodio_buscado": episodio_limpio}],
                     FUENTES_ANIME,
-                    excluir_fuente=lista_excluidas  # Pasa la lista completa
+                    excluir_fuente=lista_excluidas,
+                    download_dir=download_dir# Pasa la lista completa
                 )
 
                 videos_finales = []
