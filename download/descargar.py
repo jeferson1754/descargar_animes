@@ -1391,8 +1391,12 @@ def proceso_local_descargar_archivos(download_dir):
     ]
 
     if not videos_finales:
-        logging.info(
-            "🎉 ¡No hay animes pendientes o para cambiar fuente en Google Sheets!")
+        mensaje = (
+            "🎉 *¡Todo al día!*\n\n"
+            "No hay animes pendientes por descargar ni enlaces que requieran cambio de fuente en Google Sheets."
+        )
+        logging.info("🎉 No hay animes pendientes ni enlaces por actualizar.")
+        enviar_mensaje_telegram(mensaje)
         return
 
     logging.info(f"\nAnimes listos para descargar ({len(videos_finales)}):")
