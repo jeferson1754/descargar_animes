@@ -287,6 +287,9 @@ def buscar_enlace_descarga_y_actualizar(driver, videos_encontrados):
 
     return videos_con_descarga
 
+# Servidores permitidos/prioritarios (puedes ajustar esta lista)
+SERVIDORES_ACEPTADOS = ["mega", "mediafire" , "voe", "mixdrop", "mp4upload"]
+
 
 def buscar_videos_jkanime(driver, url, animes):
 
@@ -323,25 +326,23 @@ def buscar_videos_jkanime(driver, url, animes):
                 links_descarga = buscar_boton_descarga(
                     driver, url_episodio) if url_episodio else []
 
-                # Filtrar servidores de interés
+                # 1. Filtrar servidores de interés permitidos
                 descargas_filtradas = [
                     d for d in links_descarga
-                    if d['servidor'].lower() in ['mediafire', 'mega']
+                    if d.get('servidor', '').lower() in SERVIDORES_ACEPTADOS
                 ] if links_descarga else []
 
-                # 2. Selección automática: Buscar Mega primero, si no existe, buscar Mediafire
+                # 2. Selección automática siguiendo el orden de prioridad de SERVIDORES_ACEPTADOS
                 enlace_principal = None
 
-                # Si no hay Mega, buscar Mediafire como respaldo
-                if not enlace_principal:
-                    for d in descargas_filtradas:
-                        if d['servidor'].lower() == 'mediafire':
-                            enlace_principal = d['enlace']
-                            break
-
-                # Si falla todo, usar la URL genérica del episodio
-                if not enlace_principal:
-                    enlace_principal = url_episodio
+                for servidor_prioritario in SERVIDORES_ACEPTADOS:
+                    enlace_encontrado = next(
+                        (d['enlace'] for d in descargas_filtradas if d.get('servidor', '').lower() == servidor_prioritario),
+                        None
+                    )
+                    if enlace_encontrado:
+                        enlace_principal = enlace_encontrado
+                        break
 
                 # Estructura limpia compatible con tu función de nube
                 item_estructurado = {
