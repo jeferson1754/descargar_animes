@@ -973,6 +973,20 @@ def descargar_video_con_reintentos(
 # MÓDULO 1: BÚSQUEDA, VALIDACIÓN Y SHEETS (NUBE)
 # ==========================================
 
+def validar_enlace_unico(driver, video):
+    enlace = video.get("link_descarga")
+    if not enlace:
+        return False
+
+    # Asumimos Mega si contiene 'mega.nz' o 'mega.co.nz'
+    if "mega" in enlace.lower():
+        es_valido = validar_enlace_mega(driver, enlace)
+        video["servidor_seleccionado"] = "Mega"
+    else:
+        es_valido = validar_enlace_generico(driver, enlace)
+        video["servidor_seleccionado"] = "Generico"
+
+    return es_valido
 
 def obtener_primer_enlace_valido(driver, video):
     """
@@ -1211,7 +1225,7 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
         
         for video in videos_brutos:
             # Revisa la lista 'servidores' en orden (Mega, Voe, Mixdrop, etc.)
-            if obtener_primer_enlace_valido(driver, video):
+            if validar_enlace_unico(driver, video):
                 logging.info(
                     f"✅ Enlace válido ({video.get('servidor_seleccionado')}) para: {video.get('nombre')}"
                 )
