@@ -8,7 +8,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from utilidades.navegador import configurar_navegador
 from animes.comparador import tomar_captura_express
-
+from notificaciones_telegram import enviar_mensaje_telegram
 
 def extraer_nombres_anime(url, download_dir, max_reintentos=3):
     """
@@ -144,7 +144,22 @@ def extraer_nombres_anime(url, download_dir, max_reintentos=3):
                 except Exception:
                     pass
 
-    logging.error("❌ Se agotaron los 3 intentos para extraer los animes.")
+    # ============================================================
+    # NOTIFICACIÓN POR TELEGRAM TRAS FALLAR TODOS LOS REINTENTOS
+    # ============================================================
+    logging.error(f"❌ Se agotaron los {max_reintentos} intentos para extraer los animes.")
+
+    mensaje_error = (
+        "⚠️ *Alerta de Automatización*\n\n"
+        f"No se pudo extraer la lista de animes pendientes tras *{max_reintentos} intentos*.\n"
+        "Captura de pantalla generada para análisis de depuración."
+    )
+    
+    try:
+        enviar_mensaje_telegram(mensaje_error)
+    except Exception as e:
+        logging.error(f"❌ Error al enviar notificación de fallo a Telegram: {e}")
+
     return []
 
 
