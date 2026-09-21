@@ -1,5 +1,6 @@
 import re
 import os
+import time
 import logging
 import os
 from utilidades.archivos import extraer_episodio_archivo
@@ -162,6 +163,8 @@ def tomar_captura_express(url, nombre_fuente, nombre_anime="", episodio=""):
         logging.info(f"📸 Generando captura express para {nombre_fuente}...")
         driver = webdriver.Chrome(options=options)
         driver.get(url)
+        
+        time.sleep(3)
 
         # Formatear el nombre del archivo
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

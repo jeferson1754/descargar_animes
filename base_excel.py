@@ -121,10 +121,10 @@ def obtener_conexion_google_sheets():
 def leer_animes_pendientes(sheet_service):
     """
     Lee dinámicamente los datos existentes en Google Sheets y devuelve 
-    una lista con los animes ya registrados para evitar duplicados o búsquedas innecesarias.
+    únicamente la lista de animes con estado 'Pendiente' o 'Cambiar Fuente'.
     """
     if not sheet_service:
-        logging.ERROR("❌ No hay conexión activa con Google Sheets.")
+        logging.error("❌ No hay conexión activa con Google Sheets.")
         return []
 
     try:
@@ -146,17 +146,21 @@ def leer_animes_pendientes(sheet_service):
         datos_existentes = filas_totales_hoja[1:]
 
         animes_registrados = []
+        
+
         for fila in datos_existentes:
             if len(fila) >= 2:
-                nombre = fila[0]
-                episodio = fila[1]
-                enlace = fila[2] if len(fila) > 2 else ""
-                fuente = fila[3] if len(fila) > 3 else ""
-                fuente_fallida = fila[4] if len(fila) > 4 else ""
-                fecha_deteccion = fila[5] if len(fila) > 5 else ""
-                fecha_actualizacion = fila[6] if len(fila) > 6 else ""
-                fecha_descarga = fila[7] if len(fila) > 7 else ""
-                estado = fila[8] if len(fila) > 8 else "Pendiente"
+                nombre = fila[0].strip()
+                episodio = fila[1].strip()
+                enlace = fila[2].strip() if len(fila) > 2 else ""
+                fuente = fila[3].strip() if len(fila) > 3 else ""
+                fuente_fallida = fila[4].strip() if len(fila) > 4 else ""
+                fecha_deteccion = fila[5].strip() if len(fila) > 5 else ""
+                fecha_actualizacion = fila[6].strip() if len(fila) > 6 else ""
+                fecha_descarga = fila[7].strip() if len(fila) > 7 else ""
+                estado = fila[8].strip() if len(fila) > 8 else "Pendiente"
+
+                # Filtrar solo si el estado es 'Pendiente' o 'Cambiar Fuente'
 
                 animes_registrados.append({
                     "nombre": nombre,
@@ -171,13 +175,13 @@ def leer_animes_pendientes(sheet_service):
                 })
 
         logging.info(
-            f"📖 Se leyeron {len(animes_registrados)} registros previos desde Google Sheets.")
+            f"📖 Se leyeron {len(animes_registrados)} registros activos desde Google Sheets."
+        )
         return animes_registrados
 
     except Exception as e:
         logging.error(f"❌ Error al leer los animes desde Google Sheets: {e}")
         return []
-
 
 def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
     """

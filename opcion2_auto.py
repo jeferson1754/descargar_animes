@@ -71,6 +71,22 @@ def ejecutar_opcion_2():
         animes_previos_sheets = leer_animes_pendientes(sheet_service)
         verificar_animes_desaparecidos(
             sheet_service, animes_previos_sheets, nombres_anime)
+        
+        # AGREGAR ESTO: Inyectar animes de Sheets que requieran "Cambiar Fuente" si no venían en la web
+        for item in animes_previos_sheets:
+            if item.get("estado", "").upper() == "CAMBIAR FUENTE":
+                # Verificar si ya estaba en la lista extraída de la web
+                ya_en_lista = any(
+                    n["nombre"].lower() == item["nombre"].lower() 
+                    for n in nombres_anime
+                )
+                if not ya_en_lista:
+                    nombres_anime.append({
+                        "nombre": item["nombre"],
+                        "episodio_actual": int(item["episodio"]) - 1 if item["episodio"].isdigit() else 0,
+                        "pendientes": 1,
+                        "episodio_buscado": int(item["episodio"]) if item["episodio"].isdigit() else 1
+                    })
 
     archivo_animes = "resultados_anime.txt"
     archivo_resultado_descargados = "archivos_descargados.txt"

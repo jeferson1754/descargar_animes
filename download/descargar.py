@@ -1111,35 +1111,47 @@ def flujo_descarga_animes(file_name, download_dir):
         logging.error("❌ No hay episodios pendientes para procesar.")
         return False
 
-    # ==================================================================
     # ☁️ FILTRO INTELIGENTE DE GOOGLE SHEETS (Nombre + Episodio)
     # ==================================================================
-    logging.info(
-        "☁️ Conectando con Google Sheets para verificar el historial previo...")
+    logging.info("☁️ Conectando con Google Sheets para verificar el historial previo...")
     sheet_service = obtener_conexion_google_sheets()
-    animes_en_sheet = leer_animes_pendientes(
-        sheet_service) if sheet_service else []
+    
+    # ⚠️ IMPORTANTE: Debe leer TODAS las filas de Sheets (incluyendo 'Completado')
+    # Si 'leer_animes_pendientes' filtra antes, usa una función que traiga la hoja completa.
+    animes_en_sheet = leer_animes_pendientes(sheet_service) if sheet_service else []
 
     animes_a_buscar = []
-    for anime_obj in animes_a_expandir:
-        nombre_obj = anime_obj.get("nombre", "").lower()
-        ep_obj = str(anime_obj.get("episodio_buscado", ""))
 
-        # Verificamos si ESTE EXACTO anime Y episodio ya están en la hoja
-        ya_registrado = any(
-            a["nombre"].lower() == nombre_obj and str(a["episodio"]) == ep_obj
-            for a in animes_en_sheet
+    for anime_obj in animes_a_expandir:
+        nombre_obj = anime_obj.get("nombre", "").strip().lower()
+        ep_obj = str(anime_obj.get("episodio_buscado", "")).strip()
+
+        # Busca si ESTE capítulo exacto (ej. Ep 10) ya tiene un registro en Sheets
+        registro_existente = next(
+            (a for a in animes_en_sheet 
+             if a["nombre"].strip().lower() == nombre_obj and str(a["episodio"]).strip() == ep_obj),
+            None
         )
 
-        if ya_registrado:
-            logging.info(
-                f"⏩ Omitiendo '{anime_obj.get('nombre')}' (Ep. {ep_obj}): ya se encuentra registrado en Google Sheets.")
-        else:
+        if not registro_existente:
+            # Caso A: El episodio NO existe en Sheets -> Se debe buscar
             animes_a_buscar.append(anime_obj)
+        else:
+            estado = registro_existente.get("estado", "").strip().upper()
+
+            # Caso B: Si está Pendiente o requiere Cambiar Fuente -> Se procesa
+            if estado in ["CAMBIAR FUENTE"]:
+                if registro_existente.get("fuente_fallida"):
+                    anime_obj["fuente_fallida"] = registro_existente.get("fuente_fallida")
+                animes_a_buscar.append(anime_obj)
+            else:
+                # Caso C: Estado 'COMPLETADO', 'DESCARGADO', etc. -> Se omite
+                logging.info(
+                    f"⏩ Omitiendo '{anime_obj.get('nombre')}' (Ep. {ep_obj}): Ya registrado como '{registro_existente.get('estado')}' en Google Sheets."
+                )
 
     if not animes_a_buscar:
-        logging.error(
-            "❌ No hay episodios nuevos para buscar después de revisar Google Sheets.")
+        logging.info("✅ Todos los episodios pendientes ya estaban descargados en Google Sheets.")
         return False
     # ==================================================================
 
@@ -1233,7 +1245,7 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
                 
                 tomar_captura_express(
                     url=video["link_descarga"], 
-                    nombre_fuente=video.get("fuente", "Desconocida"), 
+                    nombre_fuente="Link" + video.get("fuente", "Desconocida"), 
                     nombre_anime=video.get("nombre"), 
                     episodio=video.get("episodio_buscado")
                 )
@@ -1303,7 +1315,7 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados):
 
                                 tomar_captura_express(
                                     url=v_alt["link_descarga"],
-                                    nombre_fuente=v_alt.get(
+                                    nombre_fuente="Link Alterno" + v_alt.get(
                                         "fuente", "Desconocida"),
                                     nombre_anime=v_alt.get("nombre"),
                                     episodio=v_alt.get("episodio_buscado")
