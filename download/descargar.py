@@ -274,7 +274,7 @@ def detectar_servidor_descarga(driver):
         return "mega"
     if "voe.sx" in url or "voe" in url or "johnfullwonder" in url:
         return "voe"
-    if "miixdrop" in url:
+    if "miixdrop" in url or "mxdrop.top" in url:
         return "mixdrop"
     if "mp4upload.com" in url:
         return "mp4upload"
@@ -320,19 +320,24 @@ def encontrar_boton_descarga(driver, servidor):
     """
 
     selectores = {
-
         "mega": [
-            (
-                By.CSS_SELECTOR,
-                ".mega-component.lg-size.secondary.icon-loading.visible-txt.nav-elem.normal.button"
-            ),
+            # 1. Por atributo de ayuda/tooltip (El más preciso y estable)
+            (By.CSS_SELECTOR, "button[data-simpletip='Descargar']"),
+            (By.CSS_SELECTOR, "button[data-simpletip='Download']"),
+            
+            # 2. Por XPATH buscando el ícono de descarga interno o el atributo simpletip
+            (By.XPATH, "//button[contains(@class, 'mega-component') and contains(@data-simpletip, 'Descargar')]"),
+            (By.XPATH, "//button[contains(@class, 'mega-component') and .//i[contains(@class, 'icon-arrow-down')]]"),
+
+            # 3. Selector amplio de clase para cualquier variante del botón de descarga principal
+            (By.CSS_SELECTOR, "button.mega-component.secondary.button"),
+
+            # 4. Fallbacks anteriores (por si carga la versión web de escritorio amplia)
+            (By.CSS_SELECTOR, ".mega-component.lg-size.secondary.icon-loading.visible-txt.nav-elem.normal.button"),
         ],
 
         "streamtape": [
-            (
-                By.CSS_SELECTOR,
-                "#download"
-            ),
+            (By.CSS_SELECTOR, "#download"),
         ],
         "mediafire": [
             (By.CSS_SELECTOR, "#downloadButton"),
@@ -340,97 +345,42 @@ def encontrar_boton_descarga(driver, servidor):
             (By.CSS_SELECTOR, "a[aria-label*='Download file']")
         ],
         "voe": [
-            (
-                By.CSS_SELECTOR,
-                "a.download-user-file"
-            ),
-            (
-                By.CSS_SELECTOR,
-                "a[href*='download']"
-            ),
-            (
-                By.XPATH,
-                "//a[contains(text(), 'Descargar ahora')]"
-            ),
+            (By.CSS_SELECTOR, "a.download-user-file"),
+            (By.CSS_SELECTOR, "a[href*='download']"),
+            (By.XPATH, "//a[contains(text(), 'Descargar ahora')]"),
         ],
         "mixdrop": [
-            (
-                By.CSS_SELECTOR,
-                "a.download-btn"
-            ),
-            (
-                By.CSS_SELECTOR,
-                "a[href*='download']"
-            ),
+            (By.CSS_SELECTOR, "a.download-btn"),
+            (By.CSS_SELECTOR, "a[href*='download']"),
         ],
         "mp4upload": [
-            (
-                By.ID,
-                "method_free"
-            ),
-            (
-                By.CSS_SELECTOR,
-                "input#method_free:not([disabled])"
-            ),
-            (
-                By.CSS_SELECTOR,
-                "input.downloadbtn"
-            ),
+            (By.ID, "method_free"),
+            (By.CSS_SELECTOR, "input#method_free:not([disabled])"),
+            (By.CSS_SELECTOR, "input.downloadbtn"),
         ],
-
         "doodstream": [
-            (
-                By.CSS_SELECTOR,
-                "a.download_vd"
-            ),
-            (
-                By.CSS_SELECTOR,
-                "a[href='#download_now']"
-            ),
+            (By.CSS_SELECTOR, "a.download_vd"),
+            (By.CSS_SELECTOR, "a[href='#download_now']"),
         ],
-
     }
 
     if servidor not in selectores:
-
-        logging.error(
-            f"⚠️ Boton no encontrado o reconocido: {servidor}"
-        )
-
+        logging.error(f"⚠️ Botón no encontrado o reconocido: {servidor}")
         return None
 
     for tipo_selector, selector in selectores[servidor]:
-
         try:
-
-            boton = WebDriverWait(
-                driver,
-                10
-            ).until(
-                EC.element_to_be_clickable(
-                    (
-                        tipo_selector,
-                        selector
-                    )
-                )
+            boton = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((tipo_selector, selector))
             )
 
-            logging.info(
-                f"🖱️ Botón encontrado "
-                f"para servidor: {servidor}"
-            )
-
+            logging.info(f"🖱️ Botón encontrado para servidor: {servidor}")
             return boton
 
         except Exception:
-
             continue
 
-    logging.error(
-        f"❌ No se encontró botón para "
-        f"servidor: {servidor}"
-    )
-
+    logging.error(f"❌ No se encontró botón para servidor: {servidor}")
     return None
 
 
@@ -512,42 +462,33 @@ def hacer_click_en_boton_descarga(
         )
         driver.get(enlace_descarga)
 
-        if fuente == "Jkanime":
-            logging.info(
-                "⏳ JKAnime detectado. Esperando redirección y carga final del sitio..."
+        try:
+            # 1. Esperar a que el navegador complete la carga de la página (hasta 15s)
+            WebDriverWait(driver, 15).until(
+                lambda d: d.execute_script("return document.readyState")
+                == "complete"
             )
 
-            try:
-                # 1. Esperar a que el navegador complete la carga de la página (hasta 15s)
-                WebDriverWait(driver, 15).until(
-                    lambda d: d.execute_script("return document.readyState")
-                    == "complete"
-                )
+            # 2. Pausa táctica para permitir que ejecute scripts internos/redirecciones
+            time.sleep(3)
 
-                # 2. Pausa táctica para permitir que ejecute scripts internos/redirecciones
-                time.sleep(3)
-
-                # 3. Esperar opcionalmente a que cambie el título si la página sigue en carga inicial
-                WebDriverWait(driver, 10).until(
-                    lambda d: d.title != "" and "Cargando" not in d.title
-                )
-
-            except Exception as e:
-                logging.warning(
-                    f"⚠️ Tiempo de espera de redirección agotado en JKAnime: {e}"
-                )
-
-            # Detectar servidor utilizando la URL FINAL a la que llegó el navegador
-            url_final = driver.current_url
-            servidor = detectar_servidor_descarga(url_final)
-            logging.info(
-                f"🌐 Servidor final detectado tras redirección: {servidor} (URL: {url_final})"
+            # 3. Esperar opcionalmente a que cambie el título si la página sigue en carga inicial
+            WebDriverWait(driver, 10).until(
+                lambda d: d.title != "" and "Cargando" not in d.title
             )
 
-        else:
-            # Para otras fuentes donde el enlace inicial ya identifica directamente el servidor
-            servidor = detectar_servidor_descarga(enlace_descarga)
-            logging.info(f"🌐 Servidor detectado: {servidor}")
+        except Exception as e:
+            logging.warning(
+                f"⚠️ Tiempo de espera de redirección agotado en JKAnime: {e}"
+            )
+
+        # Detectar servidor utilizando la URL FINAL a la que llegó el navegador
+        url_final = driver.current_url
+        servidor = detectar_servidor_descarga(url_final)
+        logging.info(
+            f"🌐 Servidor final detectado tras redirección: {servidor} (URL: {url_final})"
+        )
+
 
         # --------------------------------------------------
         # 2b. Guardián Anti-Redirección Prematura
@@ -582,6 +523,7 @@ def hacer_click_en_boton_descarga(
         # --------------------------------------------------
         # 3. Validación previa para MEGA (Archivo caído)
         # --------------------------------------------------
+        
         if servidor == "mega":
             logging.info("🔍 Verificando estado del archivo en Mega...")
 
@@ -591,7 +533,16 @@ def hacer_click_en_boton_descarga(
                     "❌ Error en Mega: El archivo ya no está disponible, fue eliminado o superó la cuota."
                 )
                 return "archivo_caido"
-
+        else:
+            logging.info("🔍 Verificando estado del archivo en Servidor...")
+            
+            if not validar_enlace_generico(driver, enlace_descarga):
+                logging.error(
+                    "❌ Error en Servidor: El archivo ya no está disponible, fue eliminado o error 404."
+                )
+                return "archivo_caido"
+                
+        
         # --------------------------------------------------
         # 4. Buscar botón correspondiente
         # --------------------------------------------------
@@ -613,15 +564,7 @@ def hacer_click_en_boton_descarga(
         )
         cerrar_pestañas_publicitarias(driver, ventana_principal)
 
-        # --------------------------------------------------
-        # 5b. Flujo multipasos (Exclusivo para MIXDROP)
-        # --------------------------------------------------
-        # --------------------------------------------------
-        # 4. Flujo exclusivo para MIXDROP (Bucle hasta obtener href)
-        # --------------------------------------------------
-        # --------------------------------------------------
-        # Flujo exclusivo para MP4UPLOAD
-        # --------------------------------------------------
+
         # --------------------------------------------------
         # Flujo exclusivo para MP4UPLOAD
         # --------------------------------------------------
@@ -902,7 +845,7 @@ def descargar_video_con_reintentos(
         try:
 
             driver = configurar_navegador(
-                download_dir
+                download_dir, visor=True
             )
 
             if driver is None:
@@ -1413,15 +1356,15 @@ def proceso_local_descargar_archivos(download_dir):
             "estado": r.get("estado")
         }
         for r in registros_hoja
-        if r.get("estado", "").lower() in ["pendiente", "cambiar fuente"]
+        if r.get("estado", "").lower() in ["pendiente"]
     ]
 
     if not videos_finales:
         mensaje = (
             "🎉 *¡Todo al día!*\n\n"
-            "No hay animes pendientes por descargar ni enlaces que requieran cambio de fuente en Google Sheets."
+            "No hay animes pendientes por descargar en Google Sheets."
         )
-        logging.info("🎉 No hay animes pendientes ni enlaces por actualizar.")
+        logging.info("🎉 No hay animes pendientes")
         enviar_mensaje_telegram(mensaje)
         return
 
@@ -1469,10 +1412,32 @@ def proceso_local_descargar_archivos(download_dir):
             episodio_servidor = video.get(
                 'episodio_buscado') or video.get('episodio')
 
-            # Dentro del ciclo de descargas de tu función:
-            # 2. Manejo de resultados post-intento de descarga
-            # Dentro del ciclo de descargas de tu función:
-            if resultado in ["archivo_caido", "cuota_agotada"]:
+            # ---------------------------------------------------------------------
+            # OPCIÓN A: Éxito real de la descarga
+            # ---------------------------------------------------------------------
+            if resultado is True:
+                logging.info(f"✅ Descarga completada correctamente para: {nombre_servidor}")
+                
+                mensaje = (
+                    f"📥 *Descarga Exitosa*\n\n"
+                    f"🎬 Anime: *{nombre_servidor}*\n"
+                    f"📺 Episodio: *{episodio_servidor}*\n"
+                    f"🟢 Estado: Completado."
+                )
+                enviar_mensaje_telegram(mensaje)
+
+                if nombre_servidor and episodio_servidor:
+                    actualizar_estado_google_sheets(
+                        sheet_service=sheet_service,
+                        nombre_hoja="Animes",
+                        nombre_anime=nombre_servidor,
+                        episodio=episodio_servidor,
+                        nuevo_estado="Completado"
+                    )
+            # ---------------------------------------------------------------------
+            # OPCIÓN B: Fallo crítico detectado en Mega (Caído o Cuota)
+            # ---------------------------------------------------------------------
+            elif resultado in ["archivo_caido", "cuota_agotada"]:
                 estado_error = "Archivo Caído" if resultado == "archivo_caido" else "Cuota Agotada"
                 logging.error(
                     f"❌ {estado_error} detectado en {nombre_servidor}. Buscando otra fuente inmediatamente...")
@@ -1596,28 +1561,23 @@ def proceso_local_descargar_archivos(download_dir):
                     )
                     enviar_mensaje_telegram(mensaje_sin_fuentes)
                     continue
+            # ---------------------------------------------------------------------
+            # OPCIÓN C: Retornó False (Fallaron los 3 intentos sin ser fallo de Mega)
+            # ---------------------------------------------------------------------
+            else:
+                logging.error(f"❌ Fallaron los 3 intentos de descarga para: {nombre_servidor}")
 
-            # Dentro del bloque 'else' cuando tu script local completa la descarga y actualiza a Completado:
-            mensaje = f"📥 *Descarga Exitosa*\n\n🎬 Anime: *{nombre_servidor}*\n📺 Episodio: *{episodio_servidor}*\n🟢 Estado: Completado y Servidor Local actualizado."
-            enviar_mensaje_telegram(mensaje)
-
-            if nombre_servidor and episodio_servidor:
-                marcar_anime_descargado_con_selenium(
-                    driver_servidor,
-                    nombre_servidor,
-                    episodio_servidor
+                enviar_mensaje_telegram(
+                    f"⚠️ *Fallo de Descarga*\n\n🎬 Anime: *{nombre_servidor}*\n📺 Episodio: *{episodio_servidor}*\n🔴 Motivo: Agotados 3 reintentos (timeout o botón no interactuable)."
                 )
 
                 actualizar_estado_google_sheets(
                     sheet_service=sheet_service,
-                    nombre_hoja="Animes",                      # El nombre de la pestaña de tu hoja
+                    nombre_hoja="Animes",
                     nombre_anime=nombre_servidor,
                     episodio=episodio_servidor,
-                    nuevo_estado="Completado"
+                    nuevo_estado="Cambiar Fuente"
                 )
-            else:
-                logging.error(
-                    "⚠️ No se pudieron obtener los datos exactos para actualizar el servidor.")
 
     finally:
         try:
