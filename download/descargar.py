@@ -845,7 +845,7 @@ def descargar_video_con_reintentos(
         try:
 
             driver = configurar_navegador(
-                download_dir, visor=True
+                download_dir
             )
 
             if driver is None:
