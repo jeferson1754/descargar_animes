@@ -1006,7 +1006,7 @@ def validar_enlace_mega(driver, enlace):
 
     try:
         driver.get(enlace)
-        time.sleep(5)
+        time.sleep(10)
         texto_pagina = driver.page_source.lower()
 
         # Si encuentra errores típicos de Mega, retorna False
