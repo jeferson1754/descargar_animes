@@ -21,7 +21,7 @@ from animes.comparador import tomar_captura_express
 def verificar_descarga(
     download_dir,
     archivos_antes,
-    tiempo_maximo=900,
+    tiempo_maximo=1800,
     intervalo=2,
     tiempo_estable=6
 ):
@@ -799,7 +799,7 @@ def hacer_click_en_boton_descarga(
         archivo_descargado = verificar_descarga(
             download_dir=download_dir,
             archivos_antes=archivos_antes,
-            tiempo_maximo=900,
+            tiempo_maximo=1800,  # 30 minutos
             intervalo=2,
             tiempo_estable=6,
         )
