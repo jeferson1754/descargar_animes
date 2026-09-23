@@ -146,7 +146,6 @@ def leer_animes_pendientes(sheet_service):
         datos_existentes = filas_totales_hoja[1:]
 
         animes_registrados = []
-        
 
         for fila in datos_existentes:
             if len(fila) >= 2:
@@ -183,6 +182,7 @@ def leer_animes_pendientes(sheet_service):
         logging.error(f"❌ Error al leer los animes desde Google Sheets: {e}")
         return []
 
+
 def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
     """
     Lee los datos existentes, elimina duplicados previos de los registros nuevos,
@@ -216,7 +216,8 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
 
         for anime in resultados_animes:
             nombre_anime = anime.get("nombre_anime") or anime.get("nombre", "")
-            episodio = anime.get("episodio", "") or anime.get("episodio_buscado", "")
+            episodio = anime.get("episodio", "") or anime.get(
+                "episodio_buscado", "")
             link_descarga = anime.get("link_descarga", "")
             fuente = anime.get("fuente", "TioAnime")
             fuente_fallida = anime.get("fuente_fallida", "")
@@ -238,16 +239,19 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
                 estado
             ])
             # Clave única para identificar duplicados: (nombre_lowercase, episodio_string)
-            claves_nuevas.add((str(nombre_anime).strip().lower(), str(episodio).strip()))
+            claves_nuevas.add(
+                (str(nombre_anime).strip().lower(), str(episodio).strip()))
 
         if not filas_nuevas:
-            logging.info("ℹ️ No hay registros nuevos para actualizar en Google Sheets.")
+            logging.info(
+                "ℹ️ No hay registros nuevos para actualizar en Google Sheets.")
             return False
 
         # 🛠️ FIX 1: Filtrar filas antiguas para eliminar versiones previas de las que se están insertando
         filas_antiguas_filtradas = []
         for fila in filas_antiguas:
-            clave_antigua = (str(fila[0]).strip().lower(), str(fila[1]).strip())
+            clave_antigua = (
+                str(fila[0]).strip().lower(), str(fila[1]).strip())
             if clave_antigua not in claves_nuevas:
                 filas_antiguas_filtradas.append(fila)
 
@@ -255,8 +259,8 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         nuevos_datos_combinados = filas_nuevas + filas_antiguas_filtradas
 
         filas_finales = [[
-            "Anime", "Episodio", "Enlace", "Fuente", 
-            "Fuentes Fallidas", "Fecha Detección", 
+            "Anime", "Episodio", "Enlace", "Fuente",
+            "Fuentes Fallidas", "Fecha Detección",
             "Fecha Actualización", "Fecha Descarga", "Estado"
         ]] + nuevos_datos_combinados
 
@@ -274,21 +278,26 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
             body={"values": filas_finales}
         ).execute()
 
-        logging.info(f"✅ Google Sheets sincronizado: {len(filas_nuevas)} registros nuevos insertados arriba.")
+        logging.info(
+            f"✅ Google Sheets sincronizado: {len(filas_nuevas)} registros nuevos insertados arriba.")
 
         # 📋 FIX 2: Construir lista de pendientes sin duplicados
         lista_pendientes = []
         for anime in resultados_animes:
-            nombre = anime.get("nombre_anime") or anime.get("nombre", "Desconocido")
-            episodio = anime.get("episodio", "") or anime.get("episodio_buscado", "")
+            nombre = anime.get("nombre_anime") or anime.get(
+                "nombre", "Desconocido")
+            episodio = anime.get("episodio", "") or anime.get(
+                "episodio_buscado", "")
             if str(anime.get("estado", "Pendiente")).lower() == "pendiente":
-                lista_pendientes.append(f"• *{nombre}* (Ep. {episodio}) _[Nuevo]_")
+                lista_pendientes.append(
+                    f"• *{nombre}* (Ep. {episodio}) _[Nuevo]_")
 
         for fila in filas_antiguas_filtradas:
             if str(fila[8]).strip().lower() == "pendiente":
                 lista_pendientes.append(f"• *{fila[0]}* (Ep. {fila[1]})")
 
-        cadena_pendientes = "\n".join(lista_pendientes) if lista_pendientes else "Ninguno"
+        cadena_pendientes = "\n".join(
+            lista_pendientes) if lista_pendientes else "Ninguno"
 
         mensaje = (
             f"🤖 *Bot de Animes*\n\n"
@@ -303,13 +312,16 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         return True
 
     except Exception as e:
-        logging.error(f"❌ Error al actualizar el historial en Google Sheets: {e}")
+        logging.error(
+            f"❌ Error al actualizar el historial en Google Sheets: {e}")
         return False
+
+
 def actualizar_estado_google_sheets(
-    sheet_service, 
-    nombre_hoja, 
-    nombre_anime, 
-    episodio, 
+    sheet_service,
+    nombre_hoja,
+    nombre_anime,
+    episodio,
     nuevo_estado="Completado",
     nuevo_enlace=None,
     nueva_fuente=None,
@@ -351,12 +363,14 @@ def actualizar_estado_google_sheets(
                         fila_actual = list(fila)
                         break
 
-        # 🛠️ FIX 3: Si no existe la fila, la agregamos al final
+        # Si no existe la fila, la agregamos al final
         if not fila_encontrada_num:
             if crear_si_no_existe:
-                f_act = fecha_actualizacion if isinstance(fecha_actualizacion, str) else tiempo_actual
+                # 🟢 CAMBIO 1: Solo usa fecha_actualizacion si viene como string, si no, queda vacío ("")
+                f_act = fecha_actualizacion if isinstance(
+                    fecha_actualizacion, str) else ""
                 f_desc = tiempo_actual if nuevo_estado == "Completado" else ""
-                
+
                 nueva_fila = [
                     nombre_anime,
                     str(episodio),
@@ -364,7 +378,8 @@ def actualizar_estado_google_sheets(
                     str(nueva_fuente or ""),
                     str(fuentes_fallidas or ""),
                     tiempo_actual,  # Fecha Detección
-                    f_act,          # Fecha Actualización
+                    # Fecha Actualización (queda vacío si no se especifica)
+                    f_act,
                     f_desc,         # Fecha Descarga
                     str(nuevo_estado)
                 ]
@@ -377,17 +392,19 @@ def actualizar_estado_google_sheets(
                     body={"values": [nueva_fila]}
                 ).execute()
 
-                logging.info(f"➕ Registro creado al final de Sheets: '{nombre_anime}' (Ep. {episodio}) -> Estado: '{nuevo_estado}'")
+                logging.info(
+                    f"➕ Registro creado al final de Sheets: '{nombre_anime}' (Ep. {episodio}) -> Estado: '{nuevo_estado}'")
                 return True
             else:
-                logging.error(f"⚠️ No se encontró '{nombre_anime}' Ep. {episodio} en Google Sheets para actualizar.")
+                logging.error(
+                    f"⚠️ No se encontró '{nombre_anime}' Ep. {episodio} en Google Sheets para actualizar.")
                 return False
 
         # Normalizar a 9 columnas si la fila ya existía
         while len(fila_actual) < 9:
             fila_actual.append("")
 
-        # Actualizar campos
+        # Actualizar campos de enlace y fuentes solo si se pasaron
         if nuevo_enlace is not None:
             fila_actual[2] = str(nuevo_enlace)
         if nueva_fuente is not None:
@@ -395,12 +412,12 @@ def actualizar_estado_google_sheets(
         if fuentes_fallidas is not None:
             fila_actual[4] = str(fuentes_fallidas)
 
-        # 🛠️ FIX 4: Asignar la fecha de actualización respetando el argumento o usando tiempo_actual
-        if isinstance(fecha_actualizacion, str):
-            fila_actual[6] = fecha_actualizacion
-        else:
-            fila_actual[6] = tiempo_actual
+        # 🟢 CAMBIO 2: Solo actualiza Fecha Actualización (índice 6) si se pasa explícitamente.
+        # Si fecha_actualizacion es None, se MANTIENE intacto lo que ya había en el Sheet.
+        if fecha_actualizacion is not None:
+            fila_actual[6] = str(fecha_actualizacion)
 
+        # Si el estado pasa a Completado, grabamos la fecha de descarga
         if nuevo_estado == "Completado":
             fila_actual[7] = tiempo_actual
 
@@ -415,12 +432,15 @@ def actualizar_estado_google_sheets(
             body={"values": [fila_actual]}
         ).execute()
 
-        logging.info(f"✅ Google Sheets actualizado: '{nombre_anime}' (Ep. {episodio}) -> Estado: '{nuevo_estado}'")
+        logging.info(
+            f"✅ Google Sheets actualizado: '{nombre_anime}' (Ep. {episodio}) -> Estado: '{nuevo_estado}'")
         return True
 
     except Exception as e:
         logging.error(f"❌ Error al actualizar Google Sheets: {e}")
         return False
+
+
 def verificar_animes_desaparecidos(sheet_service, animes_registrados_sheets, animes_encontrados_web):
     """
     Compara los animes pendientes en Google Sheets con los encontrados en la web.
@@ -432,12 +452,15 @@ def verificar_animes_desaparecidos(sheet_service, animes_registrados_sheets, ani
 # Normalizamos correctamente los datos que vienen de la web
     animes_web_set = set()
     for a in animes_encontrados_web:
-        nombre = str(a.get("nombre_anime", a.get("nombre", ""))).strip().lower()
-        episodio = str(a.get("episodio", a.get("episodio_buscado", ""))).strip()
+        nombre = str(a.get("nombre_anime", a.get("nombre", ""))
+                     ).strip().lower()
+        episodio = str(a.get("episodio", a.get(
+            "episodio_buscado", ""))).strip()
         if nombre and episodio:
             animes_web_set.add((nombre, episodio))
 
-    logging.info("🔍 Verificando animes pendientes frente al servidor actual...")
+    logging.info(
+        "🔍 Verificando animes pendientes frente al servidor actual...")
 
     actualizaciones_realizadas = 0
 
@@ -449,23 +472,27 @@ def verificar_animes_desaparecidos(sheet_service, animes_registrados_sheets, ani
 
             # Si el anime y episodio que estaban pendientes YA NO figuran en la web actual
             if (nombre_sheet, episodio_sheet) not in animes_web_set:
-                logging.info(f"🔄 '{item.get('nombre')}' Ep. {episodio_sheet} ya no está en la web. Cambiando a 'Completado'...")
-                
+                logging.info(
+                    f"🔄 '{item.get('nombre')}' Ep. {episodio_sheet} ya no está en la web. Cambiando a 'Completado'...")
+
                 exito = actualizar_estado_google_sheets(
-                    sheet_service, 
-                    nombre_hoja="Animes", 
-                    nombre_anime=item.get("nombre"), 
-                    episodio=episodio_sheet, 
+                    sheet_service,
+                    nombre_hoja="Animes",
+                    nombre_anime=item.get("nombre"),
+                    episodio=episodio_sheet,
                     nuevo_estado="Completado"
                 )
-                
+
                 if exito:
                     actualizaciones_realizadas += 1
 
     if actualizaciones_realizadas > 0:
-        logging.info(f"✅ Se actualizaron {actualizaciones_realizadas} animes a 'Completado'.")
+        logging.info(
+            f"✅ Se actualizaron {actualizaciones_realizadas} animes a 'Completado'.")
     else:
-        logging.info("ℹ️ Todos los animes pendientes siguen vigentes en el servidor.")
+        logging.info(
+            "ℹ️ Todos los animes pendientes siguen vigentes en el servidor.")
+
 
 def guardar_logs_en_sheets(service):
     """Envía los logs a la pestaña Historial, insertándolos ARRIBA (Fila 2)."""
