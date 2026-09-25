@@ -288,7 +288,7 @@ def buscar_enlace_descarga_y_actualizar(driver, videos_encontrados):
     return videos_con_descarga
 
 # Servidores permitidos/prioritarios (puedes ajustar esta lista)
-SERVIDORES_ACEPTADOS = ["mega", "mediafire" , "voe", "mixdrop", "mp4upload"]
+SERVIDORES_ACEPTADOS = ["mega", "mediafire", "voe", "mixdrop", "mp4upload", "gofile"]
 
 
 def buscar_videos_jkanime(driver, url, animes):

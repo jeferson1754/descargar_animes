@@ -1,11 +1,10 @@
-'''
+
 import os
 import sys
 
 # Agrega la carpeta raíz del proyecto al path de Python
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from config import DOWNLOAD_DIR
-'''
 
 from animes.comparador import tomar_captura_express
 from utilidades.archivos import normalizar_nombre
@@ -517,7 +516,7 @@ def buscar_episodio(driver, url_anime, numero_episodio_buscado, max_intentos=3):
 import logging
 
 # Servidores permitidos/prioritarios (en orden estricto de preferencia)
-SERVIDORES_ACEPTADOS = ["mega", "mediafire", "voe", "mixdrop", "mp4upload"]
+SERVIDORES_ACEPTADOS = ["mega", "mediafire", "voe", "mixdrop", "mp4upload", "gofile"]
 
 
 def obtener_y_filtrar_servidores(
@@ -716,7 +715,7 @@ if __name__ == "__main__":
     ]
 
     driver = configurar_navegador(DOWNLOAD_DIR, visor=True)
-    SERVIDORES_ACEPTADOS = ["voe", "doodstream", "mixdrop", "mega", "mediafire"]
+    SERVIDORES_ACEPTADOS = ["mega", "mediafire", "voe", "mixdrop", "mp4upload", "gofile"]
 
     try:
         descargados = []
@@ -848,4 +847,4 @@ if __name__ == "__main__":
     else:
         logging.error("❌ No hay elementos para procesar en la nube.")
     '''
-        
+    

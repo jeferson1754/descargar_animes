@@ -554,7 +554,7 @@ def buscar_episodio(driver, url_anime, numero_episodio_buscado, max_intentos=3):
 
 
 # Servidores permitidos/prioritarios (puedes ajustar esta lista)
-SERVIDORES_ACEPTADOS = ["mega", "mediafire" , "voe", "mixdrop", "mp4upload"]
+SERVIDORES_ACEPTADOS = ["mega", "mediafire", "voe", "mixdrop", "mp4upload", "gofile"]
 
 def obtener_y_filtrar_servidores(
     driver, url_episodio, servidores_permitidos=None
