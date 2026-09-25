@@ -4,6 +4,7 @@ import json
 import logging
 import sys
 import base64
+import html
 from datetime import datetime
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -281,30 +282,36 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         logging.info(
             f"✅ Google Sheets sincronizado: {len(filas_nuevas)} registros nuevos insertados arriba.")
 
-        # 📋 FIX 2: Construir lista de pendientes sin duplicados
+       # 📋 FIX 2: Construir lista de pendientes sin duplicados
         lista_pendientes = []
         for anime in resultados_animes:
-            nombre = anime.get("nombre_anime") or anime.get(
-                "nombre", "Desconocido")
-            episodio = anime.get("episodio", "") or anime.get(
-                "episodio_buscado", "")
+            nombre = html.escape(
+                str(anime.get("nombre_anime") or anime.get("nombre", "Desconocido"))
+            )
+            episodio = html.escape(
+                str(anime.get("episodio", "") or anime.get("episodio_buscado", ""))
+            )
             if str(anime.get("estado", "Pendiente")).lower() == "pendiente":
                 lista_pendientes.append(
-                    f"• *{nombre}* (Ep. {episodio}) _[Nuevo]_")
+                    f"• <b>{nombre}</b> (Ep. {episodio}) <i>[Nuevo]</i>"
+                )
 
         for fila in filas_antiguas_filtradas:
             if str(fila[8]).strip().lower() == "pendiente":
-                lista_pendientes.append(f"• *{fila[0]}* (Ep. {fila[1]})")
+                nombre_antiguo = html.escape(str(fila[0]))
+                episodio_antiguo = html.escape(str(fila[1]))
+                lista_pendientes.append(f"• <b>{nombre_antiguo}</b> (Ep. {episodio_antiguo})")
 
-        cadena_pendientes = "\n".join(
-            lista_pendientes) if lista_pendientes else "Ninguno"
+        cadena_pendientes = (
+            "\n".join(lista_pendientes) if lista_pendientes else "Ninguno"
+        )
 
         mensaje = (
-            f"🤖 *Bot de Animes*\n\n"
+            f"🤖 <b>Bot de Animes</b>\n\n"
             f"✅ Búsqueda finalizada.\n"
-            f"🆕 Nuevos registrados: *{len(filas_nuevas)}*\n"
-            f"📌 Total de episodios pendientes: *{len(lista_pendientes)}*\n\n"
-            f"📋 *Lista de Pendientes:*\n"
+            f"🆕 Nuevos registrados: <b>{len(filas_nuevas)}</b>\n"
+            f"📌 Total de episodios pendientes: <b>{len(lista_pendientes)}</b>\n\n"
+            f"📋 <b>Lista de Pendientes:</b>\n"
             f"{cadena_pendientes}"
         )
 
