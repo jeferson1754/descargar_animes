@@ -1,7 +1,7 @@
 from fuentes.tioanime import buscar_videos_tioanime
 from fuentes.jkanime import buscar_videos_jkanime
 from fuentes.animeflv import buscar_videos_animeflv
-
+from fuentes.monoschinos import buscar_videos_monoschinos
 
 # ============================================================
 # CARPETAS
@@ -30,6 +30,12 @@ FUENTES_ANIME = [
         "url": "https://www.animeflv.one",
         "activa": True,
         "buscar": buscar_videos_animeflv
+    },
+    {
+        "nombre": "MonosChinos",
+        "url": "https://monoschinos.st/",
+        "activa": True,
+        "buscar": buscar_videos_monoschinos
     },
     {
         "nombre": "Jkanime",
