@@ -1,10 +1,11 @@
-
+'''
 import os
 import sys
 
 # Agrega la carpeta raíz del proyecto al path de Python
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from config import DOWNLOAD_DIR
+'''
 
 from animes.comparador import tomar_captura_express
 from utilidades.archivos import normalizar_nombre
