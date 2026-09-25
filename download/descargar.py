@@ -6,6 +6,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 import os
 import logging
+import html
 # 📝 Exportar el valor de la variable a un archivo .txt de depuración
 import json
 
@@ -1176,15 +1177,19 @@ def flujo_descarga_animes(file_name, download_dir):
     # 📲 NOTIFICACIÓN SI NO SE ENCONTRARON VIDEOS
     # ==================================================================
     if not videos_encontrados:
-        mensaje_telegram = (
-            "⚠️ <b>No se encontraron episodios en la búsqueda</b>\n\n"
-        )
+        lineas = [
+            "⚠️ <b>No se encontraron episodios en la búsqueda</b>\n",
+            "<b>Episodios consultados sin resultados:</b>"
+        ]
         mensaje_telegram += "<b>Episodios consultados sin resultados:</b>\n"
 
         for item in animes_a_buscar:
-            nombre = item.get("nombre")
+            # html.escape evita errores en Telegram si el nombre contiene '<', '>' o '&'
+            nombre = html.escape(str(item.get("nombre", "Sin nombre")))
             ep = item.get("episodio_buscado", item.get("episodio_actual", "?"))
-            mensaje_telegram += f"• <b>{nombre}</b> — Ep. {ep}\n"
+            lineas.append(f"• <b>{nombre}</b> — Ep. {ep}")
+        
+        mensaje_telegram = "\n".join(lineas)
 
         logging.info("No se encontraron videos para los animes indicados.")
 
@@ -1370,10 +1375,15 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, reset
             if not enlace_alternativo_encontrado:
                 cadena_final_fallidas = ", ".join(lista_excluidas)
 
+                # Escapar variables dinámicas para prevenir errores de parseo HTML en Telegram
+                nombre_esc = html.escape(str(nombre_servidor))
+                episodio_esc = html.escape(str(episodio_limpio))
+                fuentes_esc = html.escape(str(cadena_final_fallidas))
+
                 msg_error = (
-                    f"🚨 *Alerta:* Se agotaron todas las fuentes para: *{nombre_servidor} Episodio {episodio_limpio}*\n"
-                    f"📝 Fuentes probadas: {cadena_final_fallidas}\n"
-                    f"⏱️ Marcado como 'Sin Fuentes'. Se reintentará en el próximo ciclo."
+                    f"🚨 <b>Alerta:</b> Se agotaron todas las fuentes para: <b>{nombre_esc} Episodio {episodio_esc}</b>\n"
+                    f"📝 Fuentes probadas: {fuentes_esc}\n"
+                    "⏱️ Marcado como 'Sin Fuentes'. Se reintentará en el próximo ciclo."
                 )
                 logging.error(msg_error)
                 enviar_mensaje_telegram(msg_error)
@@ -1474,7 +1484,7 @@ def proceso_local_descargar_archivos(download_dir):
 
     if not videos_finales:
         mensaje = (
-            "🎉 *¡Todo al día!*\n\n"
+            "🎉 <b>¡Todo al día!</b>\n\n"
             "No hay animes pendientes por descargar en Google Sheets."
         )
         logging.info("🎉 No hay animes pendientes")
@@ -1502,10 +1512,16 @@ def proceso_local_descargar_archivos(download_dir):
                 logging.info(
                     f"⚠️ Saltando {video.get('nombre')}: enlace no disponible o bloqueado por Mega.")
                 # Cuando detectes que un archivo no está disponible o da error de cuota:
-                mensaje = f"⚠️ *Alerta de Enlace*\n\n🎬 Anime: *{video.get('nombre')}*\n🔴 Estado: Archivo Caído o Cuota Agotada."
+                nombre_anime = html.escape(str(video.get("nombre", "Desconocido")))
+
+                mensaje = (
+                    f"⚠️ <b>Alerta de Enlace</b>\n\n"
+                    f"🎬 Anime: <b>{nombre_anime}</b>\n"
+                    f"🔴 Estado: Archivo Caído o Cuota Agotada."
+                )
                 enviar_mensaje_telegram(mensaje)
                 continue
-
+            
             logging.info("\n" + "=" * 60)
             logging.info(
                 f"Descargando: {video.get('nombre')} - Episodio {video.get('episodio_buscado')}")
@@ -1532,10 +1548,13 @@ def proceso_local_descargar_archivos(download_dir):
                 logging.info(
                     f"✅ Descarga completada correctamente para: {nombre_servidor}")
 
+                nombre_esc = html.escape(str(nombre_servidor))
+                episodio_esc = html.escape(str(episodio_servidor))
+
                 mensaje = (
-                    f"📥 *Descarga Exitosa*\n\n"
-                    f"🎬 Anime: *{nombre_servidor}*\n"
-                    f"📺 Episodio: *{episodio_servidor}*\n"
+                    f"📥 <b>Descarga Exitosa</b>\n\n"
+                    f"🎬 Anime: <b>{nombre_esc}</b>\n"
+                    f"📺 Episodio: <b>{episodio_esc}</b>\n"
                     f"🟢 Estado: Completado."
                 )
                 enviar_mensaje_telegram(mensaje)
@@ -1563,8 +1582,12 @@ def proceso_local_descargar_archivos(download_dir):
                 logging.error(
                     f"❌ {estado_error} detectado en {nombre_servidor}. Buscando otra fuente inmediatamente...")
 
+                nombre_esc = html.escape(str(nombre_servidor))
+                episodio_esc = html.escape(str(episodio_servidor))
+                error_esc = html.escape(str(estado_error))
+
                 enviar_mensaje_telegram(
-                    f"🔄 *Cambiando de Fuente*\n\n🎬 Anime: *{nombre_servidor}*\n📺 Episodio: *{episodio_servidor}*\n🔴 Motivo: *{estado_error}*"
+                    f"🔄 <b>Cambiando de Fuente</b>\n\n🎬 Anime: <b>{nombre_esc}</b>\n📺 Episodio: <b>{episodio_esc}</b>\n🔴 Motivo: <b>{error_esc}</b>"
                 )
 
                 # 1. Acumular fuentes fallidas (Historial previo + Fuente actual)
@@ -1673,12 +1696,16 @@ def proceso_local_descargar_archivos(download_dir):
                     )
 
                     # Cuando se agotan las opciones y pasa a 'Sin Fuentes'
+                    nombre_esc = html.escape(str(nombre_servidor))
+                    episodio_esc = html.escape(str(episodio_limpio))
+                    fallidas_esc = html.escape(str(nueva_cadena_fallidas))
+
                     mensaje_sin_fuentes = (
-                        f"⚠️ *Alerta: Episodio Sin Fuentes*\n\n"
-                        f"🎬 Anime: *{nombre_servidor}*\n"
-                        f"📺 Episodio: *{episodio_limpio}*\n"
-                        f"🔴 Estado: *Sin Fuentes Disponibles*\n"
-                        f"📝 Nota: Se probaron todas las fuentes descartadas ({nueva_cadena_fallidas}) sin enlace válido en Mega."
+                        f"⚠️ <b>Alerta: Episodio Sin Fuentes</b>\n\n"
+                        f"🎬 Anime: <b>{nombre_esc}</b>\n"
+                        f"📺 Episodio: <b>{episodio_esc}</b>\n"
+                        f"🔴 Estado: <b>Sin Fuentes Disponibles</b>\n"
+                        f"📝 Nota: Se probaron todas las fuentes descartadas ({fallidas_esc}) sin enlace válido en Mega."
                     )
                     enviar_mensaje_telegram(mensaje_sin_fuentes)
                     continue
@@ -1690,7 +1717,7 @@ def proceso_local_descargar_archivos(download_dir):
                     f"❌ Fallaron los 3 intentos de descarga para: {nombre_servidor}")
 
                 enviar_mensaje_telegram(
-                    f"⚠️ *Fallo de Descarga*\n\n🎬 Anime: *{nombre_servidor}*\n📺 Episodio: *{episodio_servidor}*\n🔴 Motivo: Agotados 3 reintentos (timeout o botón no interactuable)."
+                    f"⚠️ <b>Fallo de Descarga</b>\n\n🎬 Anime: <b>{nombre_servidor}</b>\n📺 Episodio: <b>{episodio_servidor}</b>\n🔴 Motivo: Agotados 3 reintentos (timeout o botón no interactuable)."
                 )
 
                 actualizar_estado_google_sheets(
