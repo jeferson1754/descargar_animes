@@ -150,8 +150,8 @@ def extraer_nombres_anime(url, download_dir, max_reintentos=3):
     logging.error(f"❌ Se agotaron los {max_reintentos} intentos para extraer los animes.")
 
     mensaje_error = (
-        "⚠️ *Alerta de Automatización*\n\n"
-        f"No se pudo extraer la lista de animes pendientes tras *{max_reintentos} intentos*.\n"
+        "⚠️ <b>Alerta de Automatización</b>\n\n"
+        f"No se pudo extraer la lista de animes pendientes tras <b>{max_reintentos} intentos</b>.\n"
         "Captura de pantalla generada para análisis de depuración."
     )
     
