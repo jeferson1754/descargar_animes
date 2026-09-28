@@ -684,7 +684,7 @@ def buscar_videos_monoschinos(driver, url, animes):
                 "enlace": url_episodio,
                 "episodio": episodio_confirmado,
                 "episodio_buscado": episodio_buscado,
-                "fuente": "AnimeFLV",
+                "fuente": "MonosChinos",
                 "link_descarga": enlace_principal,
                 "servidores": servidores_validos,
             }

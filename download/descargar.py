@@ -1228,18 +1228,14 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, reset
         # ----------------------------------------------------------------------
         # A. Extracción inicial de enlaces
         # ----------------------------------------------------------------------
-        es_tioanime = all(
-            str(video.get("fuente", "")).lower() == "tioanime"
-            for video in videos_encontrados
+        fuente_detectada = (
+            videos_encontrados[0].get("fuente", "Desconocida")
+            if videos_encontrados
+            else "Desconocida"
         )
 
-        if es_tioanime:
-            videos_brutos = buscar_enlace_descarga_y_actualizar(
-                driver, videos_encontrados)
-        else:
-            logging.info(
-                "ℹ️ Fuente detectada distinta de TioAnime. Usando 'link_descarga' preexistente.")
-            videos_brutos = videos_encontrados
+        logging.info(f"ℹ️ Fuente ({fuente_detectada}) detectada. Validando enlace...")
+        videos_brutos = videos_encontrados
 
         with open("videos_brutos.txt", "w", encoding="utf-8") as archivo_txt:
             json.dump(videos_brutos, archivo_txt, ensure_ascii=False, indent=4)
