@@ -1085,6 +1085,8 @@ def validar_enlace_mega(driver, enlace):
 
 def flujo_descarga_animes(file_name, download_dir):
 
+    mensaje_telegram = ""
+
     # Leer los datos desde el archivo .json / .txt
     datos_crudos = leer_nombres_desde_txt(file_name)
 
