@@ -1159,7 +1159,10 @@ def flujo_descarga_animes(file_name, download_dir):
 
     if not animes_a_buscar:
         logging.info(
-            "✅ Todos los episodios pendientes ya estaban descargados en Google Sheets.")
+            "✅ Todos los episodios pendientes ya estaban descargados en Google Sheets."
+        )
+        mensaje = "✅ <b>Animes al día</b>\nTodos los episodios pendientes ya se encuentran descargados."
+        enviar_mensaje_telegram(mensaje)
         return False
     # ==================================================================
 
