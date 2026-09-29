@@ -172,134 +172,126 @@ def buscar_videos_tioanime(driver, url, animes):
     """
     logging.info(f"🔍 Buscando videos en: {url}")
 
-    try:
-        descargados = []
+
+    descargados = []
 
 
-        for anime in animes:
+    for anime in animes:
 
-            nombre_anime = anime["nombre"]
-            episodio_buscado = anime.get("episodio_buscado")
+        nombre_anime = anime["nombre"]
+        episodio_buscado = anime.get("episodio_buscado")
 
-            logging.info("\n" + "=" * 60)
-            logging.info(f"📺 Anime: {nombre_anime}")
-            logging.info(f"🎯 Episodio buscado: {episodio_buscado}")
-            logging.info("=" * 60)
+        logging.info("\n" + "=" * 60)
+        logging.info(f"📺 Anime: {nombre_anime}")
+        logging.info(f"🎯 Episodio buscado: {episodio_buscado}")
+        logging.info("=" * 60)
 
-            # ---------------------------------------------
-            # 1. Buscar en página principal
-            # ---------------------------------------------
+        # ---------------------------------------------
+        # 1. Buscar en página principal
+        # ---------------------------------------------
+
+        # --------------------------------------------------
+        # 1. Buscar en página principal
+        # --------------------------------------------------
+        resultado = buscar_pagina_principal(driver, URL_TIOANIME, anime)
+
+        if resultado:
+            item_principal = resultado[0]
+            url_episodio = item_principal.get("enlace")
+            episodio_confirmado = item_principal.get(
+                "episodio", episodio_buscado
+            )
+            logging.info(
+                f"✅ Encontrado en página principal: {url_episodio}")
+        else:
+            logging.info(
+                f"ℹ️ No encontrado en página principal: {nombre_anime}. Intentando búsqueda en perfil..."
+            )
 
             # --------------------------------------------------
-            # 1. Buscar en página principal
+            # 2. Fallback: Búsqueda específica en el perfil
             # --------------------------------------------------
-            resultado = buscar_pagina_principal(driver, URL_TIOANIME, anime)
+            url_anime = buscar_y_obtener_url_anime(driver, nombre_anime)
 
-            if resultado:
-                item_principal = resultado[0]
-                url_episodio = item_principal.get("enlace")
-                episodio_confirmado = item_principal.get(
-                    "episodio", episodio_buscado
-                )
-                logging.info(
-                    f"✅ Encontrado en página principal: {url_episodio}")
+            if url_anime:
+                ultimo = obtener_ultimo_episodio(driver, url_anime)
+
+                if ultimo:
+                    ultimo_ep = ultimo["episodio"]
+
+                    if (
+                        episodio_buscado is not None
+                        and ultimo_ep < episodio_buscado
+                    ):
+                        logging.info(
+                            f"⏳ El episodio {episodio_buscado} de {nombre_anime} aún no se estrena."
+                        )
+                        continue
+
+                    if ultimo_ep == episodio_buscado:
+                        url_episodio = ultimo["url"]
+                    elif ultimo_ep > episodio_buscado:
+                        especifico = buscar_episodio(
+                            driver, url_anime, episodio_buscado
+                        )
+                        if especifico:
+                            url_episodio = especifico["url"]
+
+        # --------------------------------------------------
+        # 3. Extraer y filtrar enlaces de descarga
+        # --------------------------------------------------
+        if url_episodio:
+            links_descarga = buscar_boton_descarga(driver, url_episodio)
+
+            # Validar que links_descarga sea siempre una lista
+            if isinstance(links_descarga, str):
+                links_descarga = [{"servidor": "desconocido", "enlace": links_descarga}]
+            elif not isinstance(links_descarga, list):
+                links_descarga = []
+
+            # Precalcular lista de servidores aceptados en minúsculas
+            servidores_aceptados_lower = [srv.lower() for srv in SERVIDORES_ACEPTADOS]
+
+            # Filtrar asegurando que cada elemento sea un diccionario
+            servidores_validos = [
+                s
+                for s in links_descarga
+                if isinstance(s, dict)
+                and s.get("servidor", "").lower() in servidores_aceptados_lower
+            ]
+
+            # Asignar servidor prioritario / disponible
+            if servidores_validos:
+                enlace_principal = servidores_validos[0]["enlace"]
+            elif links_descarga and isinstance(links_descarga[0], dict):
+                enlace_principal = links_descarga[0].get("enlace", url_episodio)
             else:
-                logging.info(
-                    f"ℹ️ No encontrado en página principal: {nombre_anime}. Intentando búsqueda en perfil..."
-                )
+                enlace_principal = url_episodio
 
-                # --------------------------------------------------
-                # 2. Fallback: Búsqueda específica en el perfil
-                # --------------------------------------------------
-                url_anime = buscar_y_obtener_url_anime(driver, nombre_anime)
+            item_estructurado = {
+                "nombre": f"{nombre_anime} Episodio {episodio_confirmado}",
+                "nombre_anime": nombre_anime,
+                "enlace": url_episodio,
+                "episodio": episodio_confirmado,
+                "episodio_buscado": episodio_buscado,
+                "fuente": "TioAnime",
+                "link_descarga": enlace_principal,
+                "servidores": servidores_validos,
+            }
 
-                if url_anime:
-                    ultimo = obtener_ultimo_episodio(driver, url_anime)
+            descargados.append(item_estructurado)
 
-                    if ultimo:
-                        ultimo_ep = ultimo["episodio"]
+            logging.info(f"🚀 Agregado exitosamente | Link: {enlace_principal}")
+        else:
+            logging.error(
+                f"❌ No se pudo obtener la URL del episodio para {nombre_anime}."
+            )
 
-                        if (
-                            episodio_buscado is not None
-                            and ultimo_ep < episodio_buscado
-                        ):
-                            logging.info(
-                                f"⏳ El episodio {episodio_buscado} de {nombre_anime} aún no se estrena."
-                            )
-                            continue
-
-                        if ultimo_ep == episodio_buscado:
-                            url_episodio = ultimo["url"]
-                        elif ultimo_ep > episodio_buscado:
-                            especifico = buscar_episodio(
-                                driver, url_anime, episodio_buscado
-                            )
-                            if especifico:
-                                url_episodio = especifico["url"]
-
-            # --------------------------------------------------
-            # 3. Extraer y filtrar enlaces de descarga
-            # --------------------------------------------------
-            if url_episodio:
-                links_descarga = buscar_boton_descarga(driver, url_episodio)
-
-                # Validar que links_descarga sea siempre una lista
-                if isinstance(links_descarga, str):
-                    links_descarga = [{"servidor": "desconocido", "enlace": links_descarga}]
-                elif not isinstance(links_descarga, list):
-                    links_descarga = []
-
-                # Precalcular lista de servidores aceptados en minúsculas
-                servidores_aceptados_lower = [srv.lower() for srv in SERVIDORES_ACEPTADOS]
-
-                # Filtrar asegurando que cada elemento sea un diccionario
-                servidores_validos = [
-                    s
-                    for s in links_descarga
-                    if isinstance(s, dict)
-                    and s.get("servidor", "").lower() in servidores_aceptados_lower
-                ]
-
-                # Asignar servidor prioritario / disponible
-                if servidores_validos:
-                    enlace_principal = servidores_validos[0]["enlace"]
-                elif links_descarga and isinstance(links_descarga[0], dict):
-                    enlace_principal = links_descarga[0].get("enlace", url_episodio)
-                else:
-                    enlace_principal = url_episodio
-
-                item_estructurado = {
-                    "nombre": f"{nombre_anime} Episodio {episodio_confirmado}",
-                    "nombre_anime": nombre_anime,
-                    "enlace": url_episodio,
-                    "episodio": episodio_confirmado,
-                    "episodio_buscado": episodio_buscado,
-                    "fuente": "TioAnime",
-                    "link_descarga": enlace_principal,
-                    "servidores": servidores_validos,
-                }
-
-                descargados.append(item_estructurado)
-
-                logging.info(f"🚀 Agregado exitosamente | Link: {enlace_principal}")
-            else:
-                logging.error(
-                    f"❌ No se pudo obtener la URL del episodio para {nombre_anime}."
-                )
-
-        with open("videos_tioanime.txt", "w", encoding="utf-8") as archivo_txt:
-            json.dump(descargados, archivo_txt,
-                        ensure_ascii=False, indent=4)
-            
-        return descargados
-
-    finally:
-        try:
-            driver.quit()
-            print("\n🔒 Driver principal cerrado correctamente.")
-        except Exception as e:
-            print(f"⚠️ Error al cerrar el driver: {e}")
-
+    with open("videos_tioanime.txt", "w", encoding="utf-8") as archivo_txt:
+        json.dump(descargados, archivo_txt,
+                    ensure_ascii=False, indent=4)
+        
+    return descargados
 
 def obtener_ultimo_episodio(driver, url_anime, max_intentos=3):
     if not url_anime:
