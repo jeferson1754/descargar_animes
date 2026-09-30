@@ -1038,7 +1038,7 @@ def validar_enlace_generico(driver, enlace):
 
         # Mensajes de error comunes en servidores de video
         errores_comunes = [
-            "404",
+            "error 404",
             "no puede encontrar",
             "We are sorry",
             "find the file"
@@ -1276,7 +1276,7 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, reset
 
                 tomar_captura_express(
                     url=video["link_descarga"],
-                    nombre_fuente="Link" + video.get("fuente", "Desconocida"),
+                    nombre_fuente="Link_" + video.get("fuente", "Desconocida"),
                     nombre_anime=nombre_servidor,
                     episodio=episodio_limpio
                 )
@@ -1357,7 +1357,7 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, reset
                             episodio=episodio_limpio,
                             nuevo_enlace=v_alt["link_descarga"],
                             nueva_fuente=fuente_alt_nombre,
-                            fuentes_fallidas=", ".join(lista_excluidas),
+                            fuentes_fallidas= v_alt["fuentes_fallidas"],
                             nuevo_estado="Pendiente",
                             fecha_actualizacion=fecha_ahora,
                             crear_si_no_existe=True
@@ -1507,6 +1507,8 @@ def proceso_local_descargar_archivos(download_dir):
     try:
         for video in videos_finales:
             link_descarga = video.get("link_descarga")
+            
+            fecha_ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             # Si el enlace no existe, está caído o la cuota de Mega está agotada, lo saltamos
             if not link_descarga or link_descarga == "No encontrado" or video.get("estado") in ["Archivo Caído", "Cuota Agotada"]:
@@ -1619,30 +1621,18 @@ def proceso_local_descargar_archivos(download_dir):
                 )
 
                 videos_finales = []
+                fuente_alt_nombre = v.get("fuente", "Desconocida")
                 if nuevo_video_encontrado:
                     try:
-                        es_tioanime = all(
-                            str(v.get("fuente", "")).lower() == "tioanime"
-                            for v in nuevo_video_encontrado
-                        )
-
-                        if es_tioanime:
-                            videos_brutos = buscar_enlace_descarga_y_actualizar(
-                                driver_servidor,
-                                nuevo_video_encontrado
-                            )
-                        else:
-                            logging.info(
-                                "ℹ️ Fuente distinta de TioAnime. Usando 'link_descarga' preexistente.")
-                            videos_brutos = nuevo_video_encontrado
+                        videos_brutos = nuevo_video_encontrado
 
                         # Validar los nuevos enlaces obtenidos en Mega
                         for v in videos_brutos:
                             enlace_mega = v.get(
                                 "link_descarga") or v.get("enlace")
-                            if validar_enlace_mega(driver_servidor, enlace_mega):
+                            if validar_enlace_unico(driver_servidor, enlace_mega):
                                 logging.info(
-                                    f"✅ Enlace válido en Mega para: {v.get('nombre')}")
+                                    f"✅ Enlace alternativo válido ({v.get('servidor_seleccionado')}) en '{fuente_alt_nombre}' para: {nombre_servidor}")
                                 v["estado"] = "Pendiente"
                                 videos_finales.append(v)
                             else:
@@ -1667,6 +1657,9 @@ def proceso_local_descargar_archivos(download_dir):
 
                     logging.info(
                         f"✅ Nueva fuente '{nueva_fuente_nombre}' encontrada. Sincronizando Sheets...")
+                    
+                    logging.info (f"Fuentes Fallidas 1: '{nueva_cadena_fallidas}'")
+                    logging.info (f"Fuentes Fallidas 2: '{video["fuentes_fallidas"]}'")
 
                     # B) Sincronizar en Google Sheets
                     actualizar_estado_google_sheets(
@@ -1677,7 +1670,7 @@ def proceso_local_descargar_archivos(download_dir):
                         nuevo_enlace=nuevo_link_descarga,
                         nueva_fuente=nueva_fuente_nombre,
                         fuentes_fallidas=nueva_cadena_fallidas,
-                        fecha_actualizacion=True,
+                        fecha_actualizacion=fecha_ahora,
                         nuevo_estado="Pendiente"
                     )
                     continue  # Vuelve a intentar la descarga con el nuevo enlace
@@ -1692,7 +1685,7 @@ def proceso_local_descargar_archivos(download_dir):
                         nombre_anime=nombre_servidor,
                         episodio=episodio_limpio,
                         fuentes_fallidas=nueva_cadena_fallidas,
-                        fecha_actualizacion=True,
+                        fecha_actualizacion=fecha_ahora,
                         nuevo_estado="Sin Fuentes"
                     )
 
