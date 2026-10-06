@@ -7,6 +7,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 import os
 import logging
 import html
+import re
 # 📝 Exportar el valor de la variable a un archivo .txt de depuración
 import json
 
@@ -256,27 +257,70 @@ def buscar_boton_descarga(driver, video_url):
         logging.error(f"Error al acceder a {video_url}: {e}")
         return None
 
+def es_servidor_voe(driver, url):
+    """Detecta si una página o URL corresponde a VOE utilizando múltiples firmas."""
+    # 1. Dominios/palabras clave conocidos
+    dominios_conocidos = [
+        "voe.sx",
+        "voe",
+        "johnfullwonder",
+        "jamesbornmain",
+        "teresapoliticallearn",
+    ]
+    if any(kw in url for kw in dominios_conocidos):
+        return True
+
+    # 2. Patrón de URL típico de VOE (ej: /e/1234567890ab o /v/1234567890ab)
+    if re.search(r"/[ev]/[a-zA-Z0-9]{10,16}", url):
+        # Si la URL coincide con la estructura de VOE, confirmamos
+        if isinstance(driver, str):
+            return True
+
+    # 3. Inspección del código fuente (page_source) si driver es un objeto Selenium
+    if not isinstance(driver, str):
+        try:
+            source = driver.page_source.lower()
+
+            # VOE conserva referencias internas en JS, comentarios o clases
+            firmas_voe = [
+                "voe",
+                "voe.sx",
+                "vplayer",
+                "node_id",
+                "delivery_node",
+            ]
+
+            if any(firma in source for firma in firmas_voe):
+                return True
+        except Exception:
+            pass
+
+    return False
+
 
 def detectar_servidor_descarga(driver):
+    """Detecta el servidor analizando la URL, los atributos href,
+
+    el texto visible y el código fuente en páginas intermedias.
     """
-    Detecta el servidor analizando la URL, los atributos href y 
-    el texto visible de los botones o enlaces en páginas intermedias.
-    """  # Si le pasamos la URL directamente como texto (str)
     if isinstance(driver, str):
         url = driver.lower()
-    # Si le pasamos el objeto driver de Selenium
     else:
         url = driver.current_url.lower()
 
-    # Dar un breve respiro para que carguen los elementos dinámicos de la página intermedia
     time.sleep(2)
 
-    # 1. Detección rápida por URL actual
+    # --------------------------------------------------
+    # 1. Detección rápida por URL / Patrones
+    # --------------------------------------------------
     if "mega.nz" in url or "mega.co.nz" in url:
         return "mega"
-    if "voe.sx" in url or "voe" in url or "johnfullwonder" in url:
+
+    # Detección inteligente de VOE
+    if es_servidor_voe(driver, url):
         return "voe"
-    if "miixdrop" in url or "mxdrop.top" in url:
+
+    if "mixdrop" in url or "miixdrop" in url or "mxdrop.top" in url:
         return "mixdrop"
     if "mp4upload.com" in url:
         return "mp4upload"
@@ -285,37 +329,40 @@ def detectar_servidor_descarga(driver):
     if "gofile.io" in url:
         return "gofile"
 
-    # 2. Búsqueda profunda en elementos (Enlaces y Botones)
-    try:
-        # Buscamos tanto etiquetas 'a' como botones 'button' o divs interactivos
-        elementos = driver.find_elements(
-            By.TAG_NAME, "a") + driver.find_elements(By.TAG_NAME, "button")
+    # --------------------------------------------------
+    # 2. Búsqueda profunda en elementos de la página
+    # --------------------------------------------------
+    if not isinstance(driver, str):
+        try:
+            elementos = driver.find_elements(
+                By.TAG_NAME, "a"
+            ) + driver.find_elements(By.TAG_NAME, "button")
 
-        for elemento in elementos:
-            try:
-                href = elemento.get_attribute("href") or ""
-                texto_elemento = elemento.text.lower()
+            for elemento in elementos:
+                try:
+                    href = elemento.get_attribute("href") or ""
+                    texto = elemento.text.lower()
+                    contenido_total = f"{href} {texto}".lower()
 
-                contenido_total = (href + " " + texto_elemento).lower()
+                    if "mega" in contenido_total:
+                        return "mega"
+                    if es_servidor_voe(href, href) or "voe" in contenido_total:
+                        return "voe"
+                    if "mixdrop" in contenido_total:
+                        return "mixdrop"
+                    if "mp4upload" in contenido_total:
+                        return "mp4upload"
+                    if "mediafire" in contenido_total:
+                        return "mediafire"
+                    if "gofile" in contenido_total:
+                        return "gofile"
+                except Exception:
+                    continue
 
-                if "mega" in contenido_total:
-                    return "mega"
-                if "voe" in contenido_total:
-                    return "voe"
-                if "mixdrop" in contenido_total:
-                    return "mixdrop"
-                if "mp4upload" in contenido_total:
-                    return "mp4upload"
-                if "mediafire" in contenido_total:
-                    return "mediafire"
-                if "gofile" in contenido_total:
-                    return "gofile"
-            except Exception:
-                continue
-
-    except Exception as e:
-        logging.error(
-            f"⚠️ Error detectando servidor en página intermedia: {e}")
+        except Exception as e:
+            logging.error(
+                f"⚠️ Error detectando servidor en página intermedia: {e}"
+            )
 
     return "desconocido"
 
