@@ -11,8 +11,8 @@ from animes.comparador import tomar_captura_express
 from notificaciones_telegram import enviar_mensaje_telegram
 
 def extraer_nombres_anime(url, download_dir, max_reintentos=3):
-    """
-    Extrae únicamente los animes que tienen episodios pendientes 
+    """Extrae únicamente los animes que tienen episodios pendientes
+
     detectando la clase 'episode-badge episode-pending'.
 
     Implementa hasta 'max_reintentos' en caso de fallos de red o del navegador.
@@ -21,12 +21,14 @@ def extraer_nombres_anime(url, download_dir, max_reintentos=3):
         driver = None
         try:
             logging.info(
-                f"🔄 Intentando extraer animes (Intento {intento}/{max_reintentos})...")
+                f"🔄 Intentando extraer animes (Intento {intento}/{max_reintentos})..."
+            )
             driver = configurar_navegador(download_dir)
 
             if driver is None:
                 logging.error(
-                    f"❌ No se pudo iniciar el navegador en el intento {intento}.")
+                    f"❌ No se pudo iniciar el navegador en el intento {intento}."
+                )
                 if intento < max_reintentos:
                     time.sleep(3)
                 continue
@@ -37,81 +39,95 @@ def extraer_nombres_anime(url, download_dir, max_reintentos=3):
             try:
                 WebDriverWait(driver, 10).until(
                     EC.presence_of_element_located(
-                        (By.CSS_SELECTOR, "#animeTable tbody"))
+                        (By.CSS_SELECTOR, "#animeTable tbody")
+                    )
                 )
             except TimeoutException:
                 logging.warning(
-                    f"⚠️ No se encontró la tabla o la página demoró en cargar (Intento {intento}).")
+                    f"⚠️ No se encontró la tabla o la página demoró en cargar (Intento {intento}/{max_reintentos})."
+                )
                 if intento < max_reintentos:
                     time.sleep(3)
                     continue
-                return []
+                else:
+                    # CORRECCIÓN: En el último intento salimos del try para ejecutar el envío de Telegram
+                    break
 
             tomar_captura_express(
                 url=url,
                 nombre_fuente="Servidor de Animes",
                 nombre_anime="Todos",
-                episodio="0"
+                episodio="0",
             )
 
-            # 2. BÚSQUEDA FILTRADA: Selecciona solo filas (tr) que tengan la etiqueta 'episode-pending'
-            selector_pendientes = "#animeTable tbody tr:has(.episode-badge.episode-pending)"
+            # 2. BÚSQUEDA FILTRADA: Selecciona solo filas (tr) con etiqueta 'episode-pending'
+            selector_pendientes = (
+                "#animeTable tbody tr:has(.episode-badge.episode-pending)"
+            )
             filas_pendientes = driver.find_elements(
-                By.CSS_SELECTOR, selector_pendientes)
+                By.CSS_SELECTOR, selector_pendientes
+            )
 
-            # Respaldo: Si el navegador no soporta el pseudoselect :has(), usamos un filtro iterativo
+            # Respaldo: Si el navegador no soporta :has(), usamos filtro iterativo
             if not filas_pendientes:
                 todas_las_filas = driver.find_elements(
-                    By.CSS_SELECTOR, "#animeTable tbody tr")
+                    By.CSS_SELECTOR, "#animeTable tbody tr"
+                )
                 filas_pendientes = [
-                    f for f in todas_las_filas
-                    if len(f.find_elements(By.CSS_SELECTOR, ".episode-badge.episode-pending")) > 0
+                    f
+                    for f in todas_las_filas
+                    if len(
+                        f.find_elements(
+                            By.CSS_SELECTOR, ".episode-badge.episode-pending"
+                        )
+                    )
+                    > 0
                 ]
 
             animes = []
 
             for fila in filas_pendientes:
                 try:
-                    # ==========================================
                     # NOMBRE DEL ANIME
-                    # ==========================================
                     elemento_nombre = fila.find_element(
-                        By.CSS_SELECTOR, "td.fw-500")
+                        By.CSS_SELECTOR, "td.fw-500"
+                    )
                     nombre = driver.execute_script(
                         "return arguments[0].childNodes[0].textContent.trim();",
-                        elemento_nombre
+                        elemento_nombre,
                     )
 
                     if not nombre:
                         continue
 
-                    # ==========================================
                     # PROGRESO (Ejemplo: 7/12)
-                    # ==========================================
                     progreso_elemento = fila.find_element(
-                        By.CSS_SELECTOR, ".progress-cell span.small")
+                        By.CSS_SELECTOR, ".progress-cell span.small"
+                    )
                     texto_progreso = progreso_elemento.text.strip()
 
                     match_progreso = re.search(
-                        r"(\d+)\s*/\s*(\d+)", texto_progreso)
+                        r"(\d+)\s*/\s*(\d+)", texto_progreso
+                    )
                     if not match_progreso:
                         continue
 
                     episodio_actual = int(match_progreso.group(1))
                     episodios_totales = int(match_progreso.group(2))
 
-                    # ==========================================
                     # EPISODIOS PENDIENTES
-                    # ==========================================
                     estado_elemento = fila.find_element(
-                        By.CSS_SELECTOR, ".episode-badge.episode-pending")
+                        By.CSS_SELECTOR, ".episode-badge.episode-pending"
+                    )
                     match_pendientes = re.search(
-                        r"(\d+)", estado_elemento.text.strip())
+                        r"(\d+)", estado_elemento.text.strip()
+                    )
 
-                    pendientes = int(match_pendientes.group(1)
-                                     ) if match_pendientes else 1
-
-                    # El episodio a buscar siempre es el siguiente al actual
+                    pendientes = (
+                        int(match_pendientes.group(1))
+                        if match_pendientes
+                        else 1
+                    )
                     episodio_buscado = episodio_actual + 1
 
                     anime = {
@@ -119,21 +135,23 @@ def extraer_nombres_anime(url, download_dir, max_reintentos=3):
                         "episodio_actual": episodio_actual,
                         "episodios_totales": episodios_totales,
                         "pendientes": pendientes,
-                        "episodio_buscado": episodio_buscado
+                        "episodio_buscado": episodio_buscado,
                     }
 
                     animes.append(anime)
 
                 except Exception as e:
                     logging.error(
-                        f"⚠️ Error procesando fila con pendiente: {e}")
+                        f"⚠️ Error procesando fila con pendiente: {e}"
+                    )
 
-            # Éxito: retornamos los animes encontrados y salimos de la función
+            # Éxito: retornamos los animes encontrados
             return animes
 
         except Exception as e:
             logging.error(
-                f"❌ Error inesperado durante la extracción (Intento {intento}): {e}")
+                f"❌ Error inesperado durante la extracción (Intento {intento}): {e}"
+            )
             if intento < max_reintentos:
                 time.sleep(3)
 
@@ -147,18 +165,23 @@ def extraer_nombres_anime(url, download_dir, max_reintentos=3):
     # ============================================================
     # NOTIFICACIÓN POR TELEGRAM TRAS FALLAR TODOS LOS REINTENTOS
     # ============================================================
-    logging.error(f"❌ Se agotaron los {max_reintentos} intentos para extraer los animes.")
+    logging.error(
+        f"❌ Se agotaron los {max_reintentos} intentos para extraer los animes."
+    )
 
     mensaje_error = (
-        "⚠️ <b>Alerta de Automatización</b>\n\n"
-        f"No se pudo extraer la lista de animes pendientes tras <b>{max_reintentos} intentos</b>.\n"
-        "Captura de pantalla generada para análisis de depuración."
+        "⚠️ <b>Alerta de Automatización: Extracción Fallida</b>\n\n"
+        "<b>Origen:</b> Servidor de Animes\n"
+        "<b>Causa:</b> La tabla de episodios (<code>#animeTable</code>) no cargó a tiempo o la página estuvo inaccesible.\n"
+        f"<b>Reintentos ejecutados:</b> {max_reintentos}/{max_reintentos}\n\n"
     )
-    
+
     try:
         enviar_mensaje_telegram(mensaje_error)
     except Exception as e:
-        logging.error(f"❌ Error al enviar notificación de fallo a Telegram: {e}")
+        logging.error(
+            f"❌ Error al enviar notificación de fallo a Telegram: {e}"
+        )
 
     return []
 
