@@ -172,23 +172,20 @@ def buscar_videos_tioanime(driver, url, animes):
     """
     logging.info(f"🔍 Buscando videos en: {url}")
 
-
     descargados = []
 
-
     for anime in animes:
-
         nombre_anime = anime["nombre"]
         episodio_buscado = anime.get("episodio_buscado")
+
+        # Reiniciar variables para cada iteración
+        url_episodio = None
+        episodio_confirmado = episodio_buscado
 
         logging.info("\n" + "=" * 60)
         logging.info(f"📺 Anime: {nombre_anime}")
         logging.info(f"🎯 Episodio buscado: {episodio_buscado}")
         logging.info("=" * 60)
-
-        # ---------------------------------------------
-        # 1. Buscar en página principal
-        # ---------------------------------------------
 
         # --------------------------------------------------
         # 1. Buscar en página principal
@@ -202,7 +199,8 @@ def buscar_videos_tioanime(driver, url, animes):
                 "episodio", episodio_buscado
             )
             logging.info(
-                f"✅ Encontrado en página principal: {url_episodio}")
+                f"✅ Encontrado en página principal: {url_episodio}"
+            )
         else:
             logging.info(
                 f"ℹ️ No encontrado en página principal: {nombre_anime}. Intentando búsqueda en perfil..."
@@ -230,12 +228,14 @@ def buscar_videos_tioanime(driver, url, animes):
 
                     if ultimo_ep == episodio_buscado:
                         url_episodio = ultimo["url"]
+                        episodio_confirmado = ultimo_ep
                     elif ultimo_ep > episodio_buscado:
                         especifico = buscar_episodio(
                             driver, url_anime, episodio_buscado
                         )
                         if especifico:
                             url_episodio = especifico["url"]
+                            episodio_confirmado = episodio_buscado
 
         # --------------------------------------------------
         # 3. Extraer y filtrar enlaces de descarga
@@ -245,12 +245,16 @@ def buscar_videos_tioanime(driver, url, animes):
 
             # Validar que links_descarga sea siempre una lista
             if isinstance(links_descarga, str):
-                links_descarga = [{"servidor": "desconocido", "enlace": links_descarga}]
+                links_descarga = [
+                    {"servidor": "desconocido", "enlace": links_descarga}
+                ]
             elif not isinstance(links_descarga, list):
                 links_descarga = []
 
             # Precalcular lista de servidores aceptados en minúsculas
-            servidores_aceptados_lower = [srv.lower() for srv in SERVIDORES_ACEPTADOS]
+            servidores_aceptados_lower = [
+                srv.lower() for srv in SERVIDORES_ACEPTADOS
+            ]
 
             # Filtrar asegurando que cada elemento sea un diccionario
             servidores_validos = [
@@ -264,7 +268,9 @@ def buscar_videos_tioanime(driver, url, animes):
             if servidores_validos:
                 enlace_principal = servidores_validos[0]["enlace"]
             elif links_descarga and isinstance(links_descarga[0], dict):
-                enlace_principal = links_descarga[0].get("enlace", url_episodio)
+                enlace_principal = links_descarga[0].get(
+                    "enlace", url_episodio
+                )
             else:
                 enlace_principal = url_episodio
 
@@ -281,16 +287,17 @@ def buscar_videos_tioanime(driver, url, animes):
 
             descargados.append(item_estructurado)
 
-            logging.info(f"🚀 Agregado exitosamente | Link: {enlace_principal}")
+            logging.info(
+                f"🚀 Agregado exitosamente | Link: {enlace_principal}"
+            )
         else:
             logging.error(
                 f"❌ No se pudo obtener la URL del episodio para {nombre_anime}."
             )
 
     with open("videos_tioanime.txt", "w", encoding="utf-8") as archivo_txt:
-        json.dump(descargados, archivo_txt,
-                    ensure_ascii=False, indent=4)
-        
+        json.dump(descargados, archivo_txt, ensure_ascii=False, indent=4)
+
     return descargados
 
 def obtener_ultimo_episodio(driver, url_anime, max_intentos=3):
