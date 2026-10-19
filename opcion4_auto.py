@@ -7,6 +7,7 @@ from base_excel import (
     obtener_conexion_google_sheets,
     guardar_logs_en_sheets
 )
+from notificaciones_telegram import enviar_mensaje_telegram
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
@@ -23,9 +24,11 @@ def ejecutar_opcion_4():
 
         logging.info(
             "\n--- AUTOMÁTICO: INICIANDO DESCARGA LOCAL DESDE GOOGLE SHEETS (OPCIÓN 4) ---")
-        
+
         # Ejecutar proceso de descarga local
-        proceso_local_descargar_archivos(download_dir)
+        se_descargaron_archivos = proceso_local_descargar_archivos(
+            download_dir
+        )
 
         # Guardar historial de logs en Google Sheets si la conexión existe
         if sheet_service:
@@ -34,18 +37,35 @@ def ejecutar_opcion_4():
         logging.info("✅ Proceso de descarga local finalizado.")
     except Exception as e:
         logging.error(f"❌ Error crítico en ciclo automático: {e}")
-        
+        enviar_mensaje_telegram(
+            f"⚠️ <b>Alerta de Error:</b> Ocurrió un fallo en el ciclo automático:\n<code>{e}</code>"
+        )
+
     finally:
         # Ejecutar auto-limpieza al terminar el flujo (éxito o fallo)
         ejecutar_rutina_limpieza(
             directorio_capturas="debug_screenshots",
             dias_retencion_capturas=3,  # Mantiene capturas de los últimos 3 días
         )
-        
+
         limpiar_videos_descargados(
             directorio_descargas=download_dir,
             dias_retencion=7,
         )
+
+        # Un único mensaje de cierre según el resultado
+        if se_descargaron_archivos:
+            mensaje_final = (
+                "🏁 <b>Proceso Finalizado</b>\n\n"
+                "✅ Se completó la descarga de los episodios pendientes."
+            )
+        else:
+            mensaje_final = (
+                "🏁 <b>Proceso Finalizado</b>\n\n"
+                "🎉 <b>¡Todo al día!</b> No había animes pendientes por descargar."
+            )
+
+        enviar_mensaje_telegram(mensaje_final)
 
 
 if __name__ == "__main__":

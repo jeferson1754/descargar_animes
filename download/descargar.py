@@ -1531,14 +1531,10 @@ def proceso_local_descargar_archivos(download_dir):
     ]
 
     if not videos_finales:
-        mensaje = (
-            "🎉 <b>¡Todo al día!</b>\n\n"
-            "No hay animes pendientes por descargar en Google Sheets."
-        )
-        logging.info("🎉 No hay animes pendientes")
-        enviar_mensaje_telegram(mensaje)
+        logging.info("🎉 No hay animes pendientes por descargar.")
+        # Se remueve enviar_mensaje_telegram(mensaje) para evitar el mensaje duplicado
         return
-
+    
     logging.info(f"\nAnimes listos para descargar ({len(videos_finales)}):")
     for idx, video in enumerate(videos_finales, 1):
         logging.info(
