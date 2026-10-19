@@ -1668,13 +1668,14 @@ def proceso_local_descargar_archivos(download_dir):
                 )
 
                 videos_finales = []
-                fuente_alt_nombre = v.get("fuente", "Desconocida")
+               
                 if nuevo_video_encontrado:
                     try:
                         videos_brutos = nuevo_video_encontrado
 
                         # Validar los nuevos enlaces obtenidos en Mega
                         for v in videos_brutos:
+                            fuente_alt_nombre = v.get("fuente", "Desconocida")
                             enlace_mega = v.get(
                                 "link_descarga") or v.get("enlace")
                             if validar_enlace_unico(driver_servidor, enlace_mega):

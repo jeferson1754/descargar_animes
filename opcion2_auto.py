@@ -2,6 +2,7 @@ import os
 import logging
 from config import DOWNLOAD_DIR, DOWNLOAD_DIR_2, SERVIDOR
 from animes.buscador import extraer_nombres_anime
+from utilidades.limpieza import ejecutar_rutina_limpieza
 from utilidades.archivos import (
     guardar_archivos_descargados,
     guardar_animes_no_descargados,
@@ -51,70 +52,80 @@ def procesar_animes(download_dir, archivo_animes, archivo_resultado_descargados,
 
 
 def ejecutar_opcion_2():
-    download_dir = DOWNLOAD_DIR if os.path.exists(
-        DOWNLOAD_DIR) else DOWNLOAD_DIR_2
-    print(f"📁 Usando directorio: {download_dir}")
+    try:
+        download_dir = DOWNLOAD_DIR if os.path.exists(
+            DOWNLOAD_DIR) else DOWNLOAD_DIR_2
+        print(f"📁 Usando directorio: {download_dir}")
 
-    url = f"{SERVIDOR}Anime/Emision/descargar.php?faltantes=&accion=HOY"
-    logging.info(
-        "--- AUTOMÁTICO: BÚSQUEDA DE ANIMES PENDIENTES/FALTANTES (OPCIÓN 2) ---")
+        url = f"{SERVIDOR}Anime/Emision/descargar.php?faltantes=&accion=HOY"
+        logging.info(
+            "--- AUTOMÁTICO: BÚSQUEDA DE ANIMES PENDIENTES/FALTANTES (OPCIÓN 2) ---")
 
-    nombres_anime = extraer_nombres_anime(url, download_dir)
+        nombres_anime = extraer_nombres_anime(url, download_dir)
 
-    if not nombres_anime:
-        logging.error("❌ No se encontraron animes para procesar.")
-        eliminar_txt()
-        return
+        if not nombres_anime:
+            logging.error("❌ No se encontraron animes para procesar.")
+            eliminar_txt()
+            return
 
-    sheet_service = obtener_conexion_google_sheets()
-    if sheet_service:
-        animes_previos_sheets = leer_animes_pendientes(sheet_service)
-        verificar_animes_desaparecidos(
-            sheet_service, animes_previos_sheets, nombres_anime)
-        
-        # AGREGAR ESTO: Inyectar animes de Sheets que requieran "Cambiar Fuente" si no venían en la web
-        for item in animes_previos_sheets:
-            if item.get("estado", "").upper() == "CAMBIAR FUENTE":
-                # Verificar si ya estaba en la lista extraída de la web
-                ya_en_lista = any(
-                    n["nombre"].lower() == item["nombre"].lower() 
-                    for n in nombres_anime
-                )
-                if not ya_en_lista:
-                    nombres_anime.append({
-                        "nombre": item["nombre"],
-                        "episodio_actual": int(item["episodio"]) - 1 if item["episodio"].isdigit() else 0,
-                        "pendientes": 1,
-                        "episodio_buscado": int(item["episodio"]) if item["episodio"].isdigit() else 1
-                    })
-
-    archivo_animes = "resultados_anime.txt"
-    archivo_resultado_descargados = "archivos_descargados.txt"
-    archivo_resultado_no_descargados = "animes_no_descargados.txt"
-
-    guardar_resultados_animes_json(nombres_anime, archivo_animes)
-
-    logging.info(f"Cantidad de animes extraídos: {len(nombres_anime)}")
-    for nombre in nombres_anime:
-        logging.info(nombre)
-    logging.info(f"Datos guardados en '{archivo_animes}'")
-
-    procesar_animes(
-        download_dir,
-        archivo_animes,
-        archivo_resultado_descargados,
-        archivo_resultado_no_descargados
-    )
-
-    if not os.path.exists(archivo_resultado_no_descargados) or os.path.getsize(archivo_resultado_no_descargados) == 0:
-        logging.info("No hay nuevos animes pendientes para buscar videos.")
-    else:
-        flujo_descarga_animes(archivo_resultado_no_descargados, download_dir)
+        sheet_service = obtener_conexion_google_sheets()
         if sheet_service:
-            guardar_logs_en_sheets(sheet_service)
+            animes_previos_sheets = leer_animes_pendientes(sheet_service)
+            verificar_animes_desaparecidos(
+                sheet_service, animes_previos_sheets, nombres_anime)
+            
+            # AGREGAR ESTO: Inyectar animes de Sheets que requieran "Cambiar Fuente" si no venían en la web
+            for item in animes_previos_sheets:
+                if item.get("estado", "").upper() == "CAMBIAR FUENTE":
+                    # Verificar si ya estaba en la lista extraída de la web
+                    ya_en_lista = any(
+                        n["nombre"].lower() == item["nombre"].lower() 
+                        for n in nombres_anime
+                    )
+                    if not ya_en_lista:
+                        nombres_anime.append({
+                            "nombre": item["nombre"],
+                            "episodio_actual": int(item["episodio"]) - 1 if item["episodio"].isdigit() else 0,
+                            "pendientes": 1,
+                            "episodio_buscado": int(item["episodio"]) if item["episodio"].isdigit() else 1
+                        })
 
-    eliminar_txt()
-    logging.info("✅ Proceso finalizado.")
+        archivo_animes = "resultados_anime.txt"
+        archivo_resultado_descargados = "archivos_descargados.txt"
+        archivo_resultado_no_descargados = "animes_no_descargados.txt"
+
+        guardar_resultados_animes_json(nombres_anime, archivo_animes)
+
+        logging.info(f"Cantidad de animes extraídos: {len(nombres_anime)}")
+        for nombre in nombres_anime:
+            logging.info(nombre)
+        logging.info(f"Datos guardados en '{archivo_animes}'")
+
+        procesar_animes(
+            download_dir,
+            archivo_animes,
+            archivo_resultado_descargados,
+            archivo_resultado_no_descargados
+        )
+
+        if not os.path.exists(archivo_resultado_no_descargados) or os.path.getsize(archivo_resultado_no_descargados) == 0:
+            logging.info("No hay nuevos animes pendientes para buscar videos.")
+        else:
+            flujo_descarga_animes(archivo_resultado_no_descargados, download_dir)
+            if sheet_service:
+                guardar_logs_en_sheets(sheet_service)
+
+        eliminar_txt()
+        logging.info("✅ Proceso finalizado.")
+    except Exception as e:
+        logging.error(f"❌ Error crítico en ciclo automático: {e}")
+        
+    finally:
+        # Ejecutar auto-limpieza al terminar el flujo (éxito o fallo)
+        ejecutar_rutina_limpieza(
+            directorio_capturas="debug_screenshots",
+            dias_retencion_capturas=3,  # Mantiene capturas de los últimos 3 días
+        )
 
 
 if __name__ == "__main__":
