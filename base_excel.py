@@ -487,7 +487,7 @@ def verificar_animes_desaparecidos(sheet_service, animes_registrados_sheets, ani
                     nombre_hoja="Animes",
                     nombre_anime=item.get("nombre"),
                     episodio=episodio_sheet,
-                    nuevo_estado="Completado"
+                    nuevo_estado="Visto"
                 )
 
                 if exito:
