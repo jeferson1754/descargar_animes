@@ -2,7 +2,7 @@ import os
 import logging
 from config import DOWNLOAD_DIR, DOWNLOAD_DIR_2
 from download.descargar import proceso_local_descargar_archivos
-from utilidades.limpieza import ejecutar_rutina_limpieza, limpiar_videos_descargados
+from utilidades.limpieza import ejecutar_rutina_limpieza, limpiar_videos_descargados, limpiar_carpetas_fechas_vacias
 from base_excel import (
     obtener_conexion_google_sheets,
     guardar_logs_en_sheets
@@ -52,6 +52,8 @@ def ejecutar_opcion_4():
             directorio_descargas=download_dir,
             dias_retencion=7,
         )
+        
+        limpiar_carpetas_fechas_vacias(download_dir)
 
         # Un único mensaje de cierre según el resultado
         if se_descargaron_archivos:

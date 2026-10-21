@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+import datetime
 
 
 def ejecutar_rutina_limpieza(
@@ -129,3 +130,36 @@ def limpiar_videos_descargados(
         )
     else:
         logging.info("🎬 No hay videos antiguos pendientes de eliminación.")
+        
+def limpiar_carpetas_fechas_vacias(directorio_base):
+    """Elimina subcarpetas por fecha que hayan quedado completamente vacías."""
+    if not os.path.exists(directorio_base):
+        return
+
+    for raiz, dirs, _ in os.walk(directorio_base, topdown=False):
+        for d in dirs:
+            ruta_carpeta = os.path.join(raiz, d)
+            # Si la subcarpeta de la fecha está vacía, se elimina
+            if not os.listdir(ruta_carpeta):
+                try:
+                    os.rmdir(ruta_carpeta)
+                    logging.info(f"📂 Carpeta de fecha vacía eliminada: {d}")
+                except Exception as e:
+                    logging.warning(
+                        f"⚠️ No se pudo eliminar la carpeta {d}: {e}"
+                    )
+        
+def obtener_directorio_fecha(directorio_base):
+    """Crea y retorna una subcarpeta dentro de 'directorio_base' basada en la
+
+    fecha actual (YYYY-MM-DD).
+    """
+    # Formato de la carpeta: '2026-10-21'
+    fecha_hoy = datetime.datetime.now().strftime("%Y-%m-%d")
+    ruta_fecha = os.path.join(directorio_base, fecha_hoy)
+
+    if not os.path.exists(ruta_fecha):
+        os.makedirs(ruta_fecha, exist_ok=True)
+        logging.info(f"📁 Subcarpeta del día creada: {ruta_fecha}")
+
+    return ruta_fecha

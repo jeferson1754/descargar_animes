@@ -13,6 +13,7 @@ import json
 
 from utilidades.archivos import leer_nombres_desde_txt, guardar_resultados_videos_txt
 from utilidades.navegador import configurar_navegador
+from utilidades.limpieza import obtener_directorio_fecha
 from animes.buscador import buscar_en_fuentes
 from config import FUENTES_ANIME, SERVIDOR
 from base_excel import obtener_conexion_google_sheets, guardar_y_actualizar_historial_sheets, leer_animes_pendientes, actualizar_estado_google_sheets, guardar_logs_en_sheets
@@ -1573,10 +1574,14 @@ def proceso_local_descargar_archivos(download_dir):
                 f"Descargando: {video.get('nombre')} - Episodio {video.get('episodio_buscado')}")
             logging.info("=" * 60)
 
+            # 1. Creamos / obtenemos la subcarpeta del día actual
+            carpeta_dia = obtener_directorio_fecha(download_dir)
+
+            # 2. Se la enviamos a la función de descarga
             resultado = descargar_video_con_reintentos(
                 video,
-                download_dir,
-                max_intentos=3
+                carpeta_dia,  # <--- Pasamos la ruta del día en lugar del directorio raíz
+                max_intentos=3,
             )
 
             with open("resultados.txt", "w", encoding="utf-8") as archivo_txt:
