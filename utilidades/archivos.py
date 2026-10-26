@@ -5,6 +5,7 @@ import os
 import shutil
 import logging
 
+
 def guardar_resultados_animes_txt(animes, filename):
     """
     Guarda la información de los animes en un archivo TXT.
@@ -688,43 +689,45 @@ def leer_nombres_animes_a_descargar(archivo_animes):
 
 def mover_videos_y_limpiar_carpetas(directorio_origen, directorio_destino):
     """
-    Mueve todos los videos encontrados en subcarpetas al directorio_destino
-    y elimina las carpetas de origen que hayan quedado vacías.
+    Mueve todos los videos preservando la estructura de subcarpetas (ej. fecha)
+    al directorio_destino y elimina solo las carpetas que queden vacías.
     """
     extensiones_video = ('.mp4', '.mkv', '.avi', '.mov', '.wmv')
 
     if not os.path.exists(directorio_destino):
         os.makedirs(directorio_destino)
 
-    # 1. Mover los archivos
+    # 1. Mover los archivos manteniendo la estructura de carpetas
     logging.info("--- Moviendo archivos ---")
     for root, dirs, files in os.walk(directorio_origen):
-        # Evitar procesar el mismo directorio destino si está dentro del origen
         if os.path.abspath(root) == os.path.abspath(directorio_destino):
             continue
 
         for file in files:
             if file.lower().endswith(extensiones_video):
                 origen = os.path.join(root, file)
-                destino = os.path.join(directorio_destino, file)
+
+                # Obtener la ruta relativa para conservar la carpeta padre (ej. '2026-10-25/video.mp4')
+                rel_path = os.path.relpath(origen, directorio_origen)
+                destino = os.path.join(directorio_destino, rel_path)
+
+                # Asegurar que la subcarpeta de destino exista
+                os.makedirs(os.path.dirname(destino), exist_ok=True)
 
                 if not os.path.exists(destino):
                     shutil.move(origen, destino)
-                    logging.info(f"✅ Movido: {file}")
+                    logging.info(f"✅ Movido: {rel_path}")
                 else:
-                    logging.warning(f"⚠️ Ya existe: {file}")
+                    logging.warning(f"⚠️ Ya existe: {rel_path}")
 
     # 2. Eliminar carpetas vacías
-    # Usamos topdown=False para eliminar subcarpetas antes que la carpeta padre
     logging.info("\n--- Limpiando carpetas vacías ---")
     for root, dirs, files in os.walk(directorio_origen, topdown=False):
-        # No borrar el directorio raíz de origen ni el directorio destino
         if os.path.abspath(root) == os.path.abspath(directorio_origen):
             continue
         if os.path.abspath(root) == os.path.abspath(directorio_destino):
             continue
 
-        # Si la carpeta está vacía, borrarla
         if not os.listdir(root):
             try:
                 os.rmdir(root)
@@ -742,10 +745,12 @@ def eliminar_txt():
         '.') if archivo.endswith('.txt') and archivo != 'requirements.txt']
 
     if not archivos_txt:
-        logging.warning("No se encontraron archivos TXT en la carpeta actual (excepto 'requirements.txt').")
+        logging.warning(
+            "No se encontraron archivos TXT en la carpeta actual (excepto 'requirements.txt').")
         return
 
-    logging.warning("Se encontraron los siguientes TXT (excepto 'requirements.txt'):")
+    logging.warning(
+        "Se encontraron los siguientes TXT (excepto 'requirements.txt'):")
     for archivo in archivos_txt:
         logging.info(archivo)
 
