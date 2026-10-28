@@ -7,6 +7,7 @@ from base_excel import (
     obtener_conexion_google_sheets,
     guardar_logs_en_sheets
 )
+from recorte.api_anime import ejecucion_recortador
 from notificaciones_telegram import enviar_mensaje_telegram
 
 logging.basicConfig(level=logging.INFO,
@@ -66,6 +67,8 @@ def ejecutar_opcion_4():
                 "🏁 <b>Proceso Finalizado</b>\n\n"
                 "🎉 <b>¡Todo al día!</b> No había animes pendientes por descargar."
             )
+
+        ejecucion_recortador()
 
         enviar_mensaje_telegram(mensaje_final)
 
