@@ -1,5 +1,5 @@
-
 from animes.comparador import tomar_captura_express
+from animes.coincidencia import nombre_coincide, validar_url_perfil
 from utilidades.archivos import normalizar_nombre
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
@@ -160,17 +160,11 @@ def buscar_pagina_principal(driver, url, animes, max_intentos=3):
             episodio_buscado = animes.get(
                 "episodio_buscado") if isinstance(animes, dict) else None
 
-            nombre_normalizado = normalizar_nombre(nombre_anime)
-            texto_normalizado = normalizar_nombre(texto)
-
-            coincidencias = difflib.get_close_matches(
-                nombre_normalizado,
-                [texto_normalizado],
-                n=1,
-                cutoff=0.7
-            )
-
-            if not coincidencias:
+            # Comparación ESTRICTA (antes difflib cutoff=0.7 confundía
+            # "Ao no Hako" con "Ao no Hashi" o mezclaba temporadas)
+            if not nombre_coincide(nombre_anime, texto, episodio_buscado):
+                print(
+                    f"⏭️ Título descartado por no coincidir: '{texto}' ≠ '{nombre_anime}'")
                 continue
 
             if episodio_buscado is not None and episodio != episodio_buscado:
@@ -604,6 +598,7 @@ def buscar_videos_animeflv(driver, url, animes):
 
         url_episodio = None
         episodio_confirmado = episodio_buscado
+        titulo_encontrado = None  # título REAL que mostró la web (evidencia)
 
         # ---------------------------------------------
         # 1. Buscar en página principal
@@ -613,6 +608,7 @@ def buscar_videos_animeflv(driver, url, animes):
         if resultado_principal:
             # Si se encontró en la principal, extraemos la URL del primer resultado
             url_episodio = resultado_principal[0].get("enlace")
+            titulo_encontrado = resultado_principal[0].get("nombre")
             logging.info(
                 f"✅ Encontrado en página principal: {url_episodio}"
             )
@@ -625,6 +621,13 @@ def buscar_videos_animeflv(driver, url, animes):
                 "ℹ️ No encontrado en página principal. Buscando en perfil del anime..."
             )
             url_anime = buscar_y_obtener_url_anime(driver, nombre)
+
+            # El buscador de la web devuelve el "primer resultado" sin verificar:
+            # si no es el anime buscado (otra serie/temporada), se descarta.
+            if url_anime and not validar_url_perfil(url_anime, nombre):
+                logging.error(
+                    f"🚫 El primer resultado de la búsqueda ({url_anime}) NO coincide con '{nombre}'. Se descarta.")
+                url_anime = None
 
             ultimo = obtener_ultimo_episodio(driver, url_anime)
 
@@ -678,7 +681,7 @@ def buscar_videos_animeflv(driver, url, animes):
         # 3. EXTRAER Y FILTRAR SERVIDORES DE DESCARGA
         # --------------------------------------------------
         if url_episodio:
-            links_descarga = buscar_boton_descarga(driver, url_episodio)
+            links_descarga = buscar_boton_descarga(driver, url_episodio) or []
 
             # Filtrar enlaces según los servidores aceptados
             servidores_validos = [
@@ -688,16 +691,25 @@ def buscar_videos_animeflv(driver, url, animes):
                 in [srv.lower() for srv in SERVIDORES_ACEPTADOS]
             ]
 
+            # Ordenar por prioridad (mega primero, etc.) para que, si uno falla,
+            # se pruebe el siguiente servidor de ESTA misma fuente
+            servidores_validos.sort(
+                key=lambda s: SERVIDORES_ACEPTADOS.index(
+                    s.get("servidor", "").lower())
+            )
+
             # Asignar servidor prioritario (o primer disponible si no coincide el filtro)
             if servidores_validos:
                 enlace_principal = servidores_validos[0]["enlace"]
             elif links_descarga:
                 enlace_principal = links_descarga[0]["enlace"]
             else:
-                enlace_principal = url_episodio
+                # Sin enlaces de descarga: la página del episodio NO es un enlace
+                enlace_principal = None
 
             resultado_anime = {
                 "nombre": f"{nombre} Episodio {episodio_confirmado}",
+                "titulo_encontrado": titulo_encontrado,
                 "nombre_anime": nombre,
                 "enlace": url_episodio,
                 "episodio": episodio_confirmado,

@@ -1,4 +1,3 @@
-
 '''
 import os
 import sys
@@ -10,6 +9,7 @@ from config import DOWNLOAD_DIR
 
 
 from animes.comparador import tomar_captura_express
+from animes.coincidencia import nombre_coincide, validar_url_perfil
 from utilidades.archivos import normalizar_nombre
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
@@ -110,22 +110,9 @@ def buscar_pagina_principal(driver, url, anime, max_intentos=3):
                 continue
 
             texto = enlace.get_text(" ", strip=True)
-            texto_normalizado = normalizar_nombre(texto)
-
-            # Validación de nombre: búsqueda por subcadena + difflib como respaldo
-            coincide_nombre = (
-                nombre_normalizado in texto_normalizado
-                or bool(
-                    difflib.get_close_matches(
-                        nombre_normalizado,
-                        [texto_normalizado],
-                        n=1,
-                        cutoff=0.6,
-                    )
-                )
-            )
-
-            if not coincide_nombre:
+            # Comparación ESTRICTA (antes: subcadena + difflib cutoff=0.6, que
+            # aceptaba otras temporadas y nombres parecidos)
+            if not nombre_coincide(nombre_anime, texto, episodio_buscado):
                 continue
 
             # Obtener y validar episodio desde la URL
@@ -181,6 +168,7 @@ def buscar_videos_tioanime(driver, url, animes):
         # Reiniciar variables para cada iteración
         url_episodio = None
         episodio_confirmado = episodio_buscado
+        titulo_encontrado = None  # título REAL que mostró la web (evidencia)
 
         logging.info("\n" + "=" * 60)
         logging.info(f"📺 Anime: {nombre_anime}")
@@ -195,6 +183,7 @@ def buscar_videos_tioanime(driver, url, animes):
         if resultado:
             item_principal = resultado[0]
             url_episodio = item_principal.get("enlace")
+            titulo_encontrado = item_principal.get("nombre")
             episodio_confirmado = item_principal.get(
                 "episodio", episodio_buscado
             )
@@ -210,6 +199,13 @@ def buscar_videos_tioanime(driver, url, animes):
             # 2. Fallback: Búsqueda específica en el perfil
             # --------------------------------------------------
             url_anime = buscar_y_obtener_url_anime(driver, nombre_anime)
+
+            # El buscador devuelve el "primer resultado" sin verificar: si no es
+            # el anime buscado (otra serie/temporada), se descarta.
+            if url_anime and not validar_url_perfil(url_anime, nombre_anime):
+                logging.error(
+                    f"🚫 El primer resultado de la búsqueda ({url_anime}) NO coincide con '{nombre_anime}'. Se descarta.")
+                url_anime = None
 
             if url_anime:
                 ultimo = obtener_ultimo_episodio(driver, url_anime)
@@ -264,6 +260,13 @@ def buscar_videos_tioanime(driver, url, animes):
                 and s.get("servidor", "").lower() in servidores_aceptados_lower
             ]
 
+            # Ordenar por prioridad (mega primero, etc.) para que, si uno falla,
+            # se pruebe el siguiente servidor de ESTA misma fuente
+            servidores_validos.sort(
+                key=lambda s: SERVIDORES_ACEPTADOS.index(
+                    s.get("servidor", "").lower())
+            )
+
             # Asignar servidor prioritario / disponible
             if servidores_validos:
                 enlace_principal = servidores_validos[0]["enlace"]
@@ -272,10 +275,12 @@ def buscar_videos_tioanime(driver, url, animes):
                     "enlace", url_episodio
                 )
             else:
-                enlace_principal = url_episodio
+                # Sin enlaces de descarga: la página del episodio NO es un enlace
+                enlace_principal = None
 
             item_estructurado = {
                 "nombre": f"{nombre_anime} Episodio {episodio_confirmado}",
+                "titulo_encontrado": titulo_encontrado,
                 "nombre_anime": nombre_anime,
                 "enlace": url_episodio,
                 "episodio": episodio_confirmado,
@@ -519,7 +524,7 @@ def buscar_episodio(driver, url_anime, numero_episodio_buscado, max_intentos=3):
 
     if not url_anime:
         logging.error("❌ URL del anime vacía.")
-        driver.quit()
+        pass  # el driver es compartido: NO cerrarlo
         return None
 
     logging.info(
@@ -547,11 +552,11 @@ def buscar_episodio(driver, url_anime, numero_episodio_buscado, max_intentos=3):
             else:
                 logging.error(
                     "❌ No se pudo acceder a la página tras varios intentos.")
-                driver.quit()
+                pass  # el driver es compartido: NO cerrarlo
                 return None
 
     if not cargado_exitoso:
-        driver.quit()
+        pass  # el driver es compartido: NO cerrarlo
         return None
 
     # --------------------------------------------------
@@ -560,7 +565,7 @@ def buscar_episodio(driver, url_anime, numero_episodio_buscado, max_intentos=3):
     try:
         html = driver.page_source
         soup = BeautifulSoup(html, "html.parser")
-        driver.quit()  # Cerramos el driver ya que tenemos el HTML
+        pass  # el driver es compartido: NO cerrarlo
 
         lista = soup.find("ul", class_="episodes-list")
 
@@ -616,7 +621,7 @@ def buscar_episodio(driver, url_anime, numero_episodio_buscado, max_intentos=3):
     except Exception as e:
         logging.error(f"❌ Error procesando episodios: {e}")
         try:
-            driver.quit()
+            pass  # el driver es compartido: NO cerrarlo
         except:
             pass
         return None

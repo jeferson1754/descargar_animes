@@ -8,6 +8,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from utilidades.navegador import configurar_navegador
 from animes.comparador import tomar_captura_express
+from animes.coincidencia import validar_coincidencia_anime
 from notificaciones_telegram import enviar_mensaje_telegram
 
 def extraer_nombres_anime(url, download_dir, max_reintentos=3):
@@ -186,6 +187,17 @@ def extraer_nombres_anime(url, download_dir, max_reintentos=3):
     return []
 
 
+def _driver_vivo(driver):
+    """True si el navegador sigue respondiendo (una fuente pudo haberlo cerrado)."""
+    if driver is None:
+        return False
+    try:
+        _ = driver.current_url
+        return True
+    except Exception:
+        return False
+
+
 def buscar_en_fuentes(animes, fuentes, excluir_fuente=None, download_dir=None):
     """
     Busca cada anime en las fuentes disponibles.
@@ -234,6 +246,11 @@ def buscar_en_fuentes(animes, fuentes, excluir_fuente=None, download_dir=None):
 
             logging.info(f"🌐 Probando fuente: {nombre_fuente}")
 
+            # Si una fuente anterior cerró/rompió el navegador, abrir uno nuevo
+            if not _driver_vivo(driver_capitulos):
+                logging.warning("⚠️ El navegador de búsqueda dejó de responder. Abriendo uno nuevo...")
+                driver_capitulos = configurar_navegador(download_dir)
+
             try:
                 videos = funcion_busqueda(
                     driver_capitulos,
@@ -241,23 +258,44 @@ def buscar_en_fuentes(animes, fuentes, excluir_fuente=None, download_dir=None):
                     [anime]
                 )
 
-                if videos:
+                # Validar que cada resultado sea realmente el anime, la
+                # temporada y el episodio buscados (evita "Ao no Hashi" por
+                # "Ao no Hako", o el capítulo de otra temporada).
+                videos_validos = []
+
+                for video in videos or []:
+                    video["fuente"] = nombre_fuente
+
+                    coincide, motivo = validar_coincidencia_anime(
+                        video, nombre, episodio_buscado
+                    )
+
+                    if coincide:
+                        videos_validos.append(video)
+                    else:
+                        logging.error(
+                            f"🚫 {nombre_fuente}: resultado descartado ({motivo})"
+                        )
+
+                if videos_validos:
                     logging.info(f"✅ Encontrado en {nombre_fuente}")
-
-                    for video in videos:
-                        video["fuente"] = nombre_fuente
-
-                    resultados.extend(videos)
+                    resultados.extend(videos_validos)
                     encontrado = True
                     break
 
-                logging.error(f"❌ {nombre_fuente}: episodio no encontrado.")
+                logging.error(
+                    f"❌ {nombre_fuente}: episodio no encontrado o no coincide con lo buscado."
+                )
 
             except Exception as e:
                 logging.error(
                     f"⚠️ Error en {nombre_fuente}: {type(e).__name__}: {e}")
 
-        driver_capitulos.quit()
+        try:
+            if driver_capitulos is not None:
+                driver_capitulos.quit()
+        except Exception:
+            pass
 
         if not encontrado:
             logging.error(

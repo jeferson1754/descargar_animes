@@ -49,7 +49,7 @@ load_dotenv()
 VIDEO_EXTS = {".mkv", ".mp4", ".avi", ".webm", ".mov", ".m4v"}
 
 # --- Rutas por defecto: se usan si ejecutas sin argumentos (botón "Run" de VS Code) ---
-DEFAULT_INPUT = r"C:\Users\jvargas\Phyton\Descargar_Animes\descargas"
+DEFAULT_INPUT = r"D:\Xampp\htdocs\descargar_animes\Descargas"
 # <carpeta del episodio>/procesados  (acelerados)
 PROCESSED_DIRNAME = "procesados"
 # <carpeta del episodio>/originales  (originales)

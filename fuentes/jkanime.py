@@ -1,4 +1,3 @@
-
 #from config import DOWNLOAD_DIR
 from utilidades.navegador import configurar_navegador
 import re
@@ -15,6 +14,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from utilidades.archivos import normalizar_nombre
 from animes.comparador import tomar_captura_express
+from animes.coincidencia import nombre_coincide
 
 
 # pruebas_tioanime.py
@@ -140,17 +140,11 @@ def buscar_pagina_principal(url, animes, max_intentos=3):
             episodio_buscado = animes.get(
                 "episodio_buscado") if isinstance(animes, dict) else None
 
-            nombre_normalizado = normalizar_nombre(nombre_anime)
-            texto_normalizado = normalizar_nombre(texto)
-
-            coincidencias = difflib.get_close_matches(
-                nombre_normalizado,
-                [texto_normalizado],
-                n=1,
-                cutoff=0.7
-            )
-
-            if not coincidencias:
+            # Comparación ESTRICTA (antes difflib cutoff=0.7 confundía
+            # "Ao no Hako" con "Ao no Hashi" o mezclaba temporadas)
+            if not nombre_coincide(nombre_anime, texto, episodio_buscado):
+                print(
+                    f"⏭️ Título descartado por no coincidir: '{texto}' ≠ '{nombre_anime}'")
                 continue
 
             if episodio_buscado is not None and episodio != episodio_buscado:
@@ -332,6 +326,13 @@ def buscar_videos_jkanime(driver, url, animes):
                     if d.get('servidor', '').lower() in SERVIDORES_ACEPTADOS
                 ] if links_descarga else []
 
+                # Ordenar por prioridad (mega primero, etc.) para que, si uno falla,
+                # se pruebe el siguiente servidor de ESTA misma fuente
+                descargas_filtradas.sort(
+                    key=lambda d: SERVIDORES_ACEPTADOS.index(
+                        d.get('servidor', '').lower())
+                )
+
                 # 2. Selección automática siguiendo el orden de prioridad de SERVIDORES_ACEPTADOS
                 enlace_principal = None
 
@@ -354,13 +355,17 @@ def buscar_videos_jkanime(driver, url, animes):
                     "fuente": "JKAnime",
                     # <--- Aquí va el enlace seleccionado automáticamente
                     "link_descarga": enlace_principal,
+                    # Todos los servidores aceptados (ordenados) para poder
+                    # validarlos uno a uno y usar el siguiente si uno falla
+                    "servidores": descargas_filtradas,
+                    # Título REAL que mostró la web (evidencia para validar)
+                    "titulo_encontrado": item.get('nombre'),
                 }
 
                 resultados.append(item_estructurado)
-            else:
-                logging.info(
-                    f"ℹ️ No encontrado en página principal: {nombre_anime}")
-            continue
+        else:
+            logging.info(
+                f"ℹ️ No encontrado en página principal: {nombre_anime}")
 
 
     return resultados
