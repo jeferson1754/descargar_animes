@@ -257,6 +257,37 @@ def _recopilar_evidencias(video):
     return evidencias
 
 
+def _coincide_texto(nombres, texto, episodio, es_slug):
+    """
+    Compara un texto ya normalizado (sin 'episodio N') contra los nombres esperados.
+
+    Los portales suelen escribir el título con el episodio al final y sin la
+    palabra "episodio" ("Tensei Goblin dakedo Shitsumon Aru? 6"). Ese número NO
+    es una temporada, así que si coincide con el episodio buscado se prueba
+    también SIN él. Devuelve (ok, motivo).
+    """
+    variantes = [texto]
+    ep = str(episodio).strip() if episodio is not None else ""
+    if ep.isdigit():
+        m = re.search(rf"\s{re.escape(ep)}$", texto)
+        if m:
+            variantes.append(texto[:m.start()].strip())
+
+    motivo = "sin texto que comparar"
+    for variante in variantes:
+        if not variante:
+            continue
+        temporada_c, parte_c, texto_limpio = extraer_temporada_y_parte(variante)
+        for nombre in nombres:
+            ok, motivo = _comparar_nombre(
+                nombre, texto_limpio.split(), temporada_c, parte_c, es_slug
+            )
+            if ok:
+                return True, "ok"
+
+    return False, motivo
+
+
 def validar_coincidencia_anime(video, nombre_esperado, episodio_esperado):
     """
     Comprueba que el resultado de una fuente corresponda al anime, la
@@ -291,16 +322,11 @@ def validar_coincidencia_anime(video, nombre_esperado, episodio_esperado):
         ):
             return False, f"{origen}: episodio {ep_detectado} ≠ {ep_esperado}"
 
-        temporada_c, parte_c, texto_limpio = extraer_temporada_y_parte(texto)
-
-        motivo = ""
-        for nombre in nombres:
-            ok, motivo = _comparar_nombre(
-                nombre, texto_limpio.split(), temporada_c, parte_c, es_slug
-            )
-            if ok:
-                break
-        else:
+        # Para las URL el episodio ya se extrajo del slug; para los títulos se
+        # prueba también sin el número final si coincide con el episodio buscado.
+        ok, motivo = _coincide_texto(
+            nombres, texto, None if es_slug else ep_esperado, es_slug)
+        if not ok:
             return False, f"{origen}: {motivo}"
 
     return True, "ok"
@@ -330,27 +356,12 @@ def nombre_coincide(nombre_buscado, titulo_encontrado, episodio=None, es_slug=Fa
 
     _, texto = extraer_episodio_de_texto(texto)
 
-    variantes = [texto]
-    ep = str(episodio).strip() if episodio is not None else ""
-    if ep.isdigit():
-        m = re.search(rf"\s{re.escape(ep)}$", texto)
-        if m:
-            variantes.append(texto[:m.start()].strip())
-
     nombres = [nombre_buscado] + \
         ALIAS_ANIME.get(normalizar_texto(nombre_buscado), [])
 
-    motivo = ""
-    for variante in variantes:
-        if not variante:
-            continue
-        temporada_c, parte_c, texto_limpio = extraer_temporada_y_parte(variante)
-        for nombre in nombres:
-            ok, motivo = _comparar_nombre(
-                nombre, texto_limpio.split(), temporada_c, parte_c, es_slug
-            )
-            if ok:
-                return True
+    ok, motivo = _coincide_texto(nombres, texto, episodio, es_slug)
+    if ok:
+        return True
 
     logging.info(f"🔎 '{titulo_encontrado}' ≠ '{nombre_buscado}': {motivo}")
     return False

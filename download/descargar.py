@@ -4,12 +4,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
-from urllib.parse import urlparse
 import os
 import logging
 import html
 import re
 import json
+from urllib.parse import urlparse
 
 from utilidades.archivos import leer_nombres_desde_txt, guardar_resultados_videos_txt
 from utilidades.navegador import configurar_navegador
@@ -271,79 +271,182 @@ def buscar_boton_descarga(driver, video_url):
         return None
 
 
+# ==========================================
+# DETECCIÓN DE VOE (usa dominios que ROTAN con frecuencia)
+# ==========================================
+#
+# VOE redirige a dominios distintos y cambiantes (johnfullwonder, jamesbornmain,
+# shannoncoldalready...), así que reconocerlo por una lista fija de palabras
+# falla tarde o temprano. La detección combina, en este orden:
+#   1) el HOST de la URL (dominios base + dominios aprendidos automáticamente),
+#   2) el enlace ORIGINAL / la pista del servidor (voe.sx redirige a un espejo),
+#   3) la firma de la PÁGINA (elementos y textos propios de VOE).
+# Cuando una descarga por VOE termina bien, su dominio se guarda en
+# dominios_voe.json y la próxima vez se reconoce solo por el host.
 
-DOMINIOS_VOE = (
-    "voe.sx", "voe-un-block", "johnfullwonder", "jamesbornmain",
-    "teresapoliticallearn", "shannoncoldalready",
+ARCHIVO_DOMINIOS_VOE = "dominios_voe.json"
+
+# Fragmentos de host de VOE conocidos. Agrega aquí los nuevos si quieres
+# (los que descargan bien se aprenden solos en dominios_voe.json).
+DOMINIOS_VOE_BASE = (
+    "voe.sx",
+    "johnfullwonder",
+    "jamesbornmain",
+    "teresapoliticallearn",
+    "shannoncoldalready",
 )
 
-# Dominios de publicidad/redirectores conocidos (ajusta a tu caso)
-DOMINIOS_PUBLICIDAD = ("doubleclick", "popads", "adsterra", "propellerads")
-
-# Ruta raíz tipo /bs0jzeblyjhm (id alfanumérico de 10-16 chars)
-RE_ID_RAIZ = re.compile(r"^/[a-z0-9]{10,16}/?$", re.I)
-# Rutas clásicas /e/<id>, /v/<id>, /d/<id>
-RE_ID_PREFIJO = re.compile(r"^/(?:e|v|d)/[a-z0-9]{10,16}/?$", re.I)
-
-FIRMAS_HTML = (
-    "voe.sx", "voe-network", "voe player", "vplayer",
-    "delivery_node", "node_id", "voe-player",
+# Redirecciones publicitarias conocidas (NO son del servidor)
+PATRONES_PUBLICIDAD = (
+    "signaldefendgo",
+    "clickid=",
+    "pets/rabbits",
+    "bdsclk",
+    "trk=",
+    "redirect",
 )
 
+_dominios_voe_aprendidos = None  # caché en memoria
 
-def es_servidor_voe(driver, url, umbral=3):
-    """Detecta VOE por puntuación: estructura de URL + contenido + DOM."""
-    url = (url or "").strip()
-    parsed = urlparse(url)
-    host = (parsed.netloc or "").lower()
-    path = parsed.path or ""
 
-    # Descartar publicidad conocida de entrada
-    if any(ad in host for ad in DOMINIOS_PUBLICIDAD):
+def _host_de_url(url):
+    """Host en minúsculas, sin puerto ni 'www.' ('' si no se puede leer)."""
+    texto = str(url or "").strip().lower()
+    if not texto:
+        return ""
+    if "//" not in texto:
+        texto = "//" + texto
+    try:
+        host = urlparse(texto).netloc.split("@")[-1].split(":")[0]
+    except ValueError:
+        return ""
+    return host[4:] if host.startswith("www.") else host
+
+
+def es_url_publicitaria(url):
+    url = str(url or "").lower()
+    return any(p in url for p in PATRONES_PUBLICIDAD)
+
+
+def _cargar_dominios_voe_aprendidos():
+    global _dominios_voe_aprendidos
+    if _dominios_voe_aprendidos is None:
+        try:
+            with open(ARCHIVO_DOMINIOS_VOE, "r", encoding="utf-8") as f:
+                _dominios_voe_aprendidos = set(json.load(f).get("dominios", []))
+        except Exception:
+            _dominios_voe_aprendidos = set()
+    return _dominios_voe_aprendidos
+
+
+def _host_es_voe(host):
+    """True si el host es de VOE: etiqueta 'voe', dominio base o aprendido."""
+    if not host:
         return False
+    # voe.sx, www.voe.sx, voe-unblock.com ... pero NO 'devoe.com'
+    if re.search(r"(^|[.\-])voe([.\-]|$)", host):
+        return True
+    if any(base in host for base in DOMINIOS_VOE_BASE):
+        return True
+    return host in _cargar_dominios_voe_aprendidos()
 
-    # Dominio conocido: confirmación inmediata
-    if any(d in host for d in DOMINIOS_VOE):
+
+def registrar_dominio_voe(url):
+    """Guarda el dominio de una página VOE que sí entregó la descarga."""
+    host = _host_de_url(url)
+    if not host or _host_es_voe(host) or es_url_publicitaria(url):
+        return
+    aprendidos = _cargar_dominios_voe_aprendidos()
+    aprendidos.add(host)
+    try:
+        with open(ARCHIVO_DOMINIOS_VOE, "w", encoding="utf-8") as f:
+            json.dump({"dominios": sorted(aprendidos)}, f, ensure_ascii=False, indent=4)
+        logging.info(f"🧠 Dominio VOE nuevo aprendido: {host}")
+    except Exception as e:
+        logging.warning(f"⚠️ No se pudo guardar el dominio VOE aprendido: {e}")
+
+
+def pagina_parece_voe(driver):
+    """
+    Revisa la página cargada. Devuelve el motivo (str) si parece VOE, o None.
+    Firmas fuertes: botón 'a.download-user-file', 'voe' en el título o
+    referencias a voe.sx. Firmas débiles: se exigen al menos 2.
+    """
+    try:
+        if driver.find_elements(By.CSS_SELECTOR, "a.download-user-file"):
+            return "botón a.download-user-file"
+
+        titulo = (driver.title or "").lower()
+        source = (driver.page_source or "").lower()
+    except Exception:
+        return None
+
+    if re.search(r"\bvoe\b", titulo):
+        return "'voe' en el título"
+    if re.search(r"voe\.sx|voe-network", source):
+        return "referencia a voe.sx en el código"
+
+    debiles = [f for f in ("vplayer", "node_id", "delivery_node") if f in source]
+    if len(debiles) >= 2:
+        return f"firmas débiles ({', '.join(debiles)})"
+
+    return None
+
+
+def es_servidor_voe(driver, url):
+    """
+    Detecta VOE. 'url' puede ser la URL (str) y 'driver' un WebDriver o un str.
+    - Con solo texto: se decide por el host (dominios base + aprendidos).
+    - Con un WebDriver: si el host no es conocido, se inspecciona la página.
+    """
+    if _host_es_voe(_host_de_url(url)):
         return True
 
-    puntos = 0
+    if driver is None or isinstance(driver, str):
+        return False
 
-    # 1. Estructura de URL
-    if RE_ID_PREFIJO.match(path):
-        puntos += 2
-    elif RE_ID_RAIZ.match(path):
-        puntos += 2  # dominio rotativo con id en la raíz
+    return pagina_parece_voe(driver) is not None
 
-    # Sin driver real, solo podemos juzgar por la URL
-    if isinstance(driver, str):
-        return puntos >= 2 and bool(RE_ID_PREFIJO.match(path))
 
-    # 2. Contenido de la página
-    try:
-        source = (driver.page_source or "").lower()
-        title = (driver.title or "").lower()
-    except Exception:
-        return puntos >= umbral
+def url_es_del_servidor(url, servidor, hosts_confirmados=()):
+    """¿La URL pertenece al servidor ya identificado? (host a host, no por palabra)."""
+    if not servidor or servidor == "desconocido":
+        return False
+    host = _host_de_url(url)
+    if host in hosts_confirmados:
+        return True
+    if servidor == "voe":
+        return _host_es_voe(host)
+    return nombre_servidor_desde_url(url) == servidor
 
-    if "voe" in title:
-        puntos += 2
 
-    coincidencias = sum(1 for f in FIRMAS_HTML if f in source)
-    puntos += min(coincidencias, 3)
+def detectar_servidor_final(driver, url_final, enlace_original=None, servidor_hint=None):
+    """
+    Identifica el servidor de la página a la que llegó el navegador.
+    Devuelve (servidor, origen), con servidor 'desconocido' si no se pudo.
 
-    # 3. Elementos típicos del reproductor/descarga
-    try:
-        from selenium.webdriver.common.by import By
-        if driver.find_elements(By.CSS_SELECTOR, "video, #voe-player, .plyr, .video-js"):
-            puntos += 1
-        if driver.find_elements(By.XPATH,
-                "//a[contains(translate(., 'DOWNLOAD', 'download'), 'download')]"
-                " | //button[contains(translate(., 'DOWNLOAD', 'download'), 'download')]"):
-            puntos += 1
-    except Exception:
-        pass
+      1) host de la URL final
+      2) VOE por el enlace original / pista (voe.sx redirige a espejos rotativos)
+      3) firma de la página (VOE)
+    """
+    por_url = nombre_servidor_desde_url(url_final)
+    if por_url != "desconocido":
+        return por_url, "host de la URL"
 
-    return puntos >= umbral
+    # Una redirección publicitaria no cuenta como página de ningún servidor
+    if es_url_publicitaria(url_final):
+        return "desconocido", "redirección publicitaria"
+
+    pista = (servidor_hint or "").strip().lower()
+    if nombre_servidor_desde_url(enlace_original) == "voe" or pista == "voe":
+        return "voe", "enlace original / pista (dominio rotativo)"
+
+    motivo = pagina_parece_voe(driver)
+    if motivo:
+        return "voe", f"firma de la página: {motivo}"
+
+    return "desconocido", "sin coincidencias"
+
 
 def detectar_servidor_descarga(driver):
     """Detecta el servidor analizando la URL, los atributos href,
@@ -393,7 +496,7 @@ def detectar_servidor_descarga(driver):
 
                     if "mega" in contenido_total:
                         return "mega"
-                    if es_servidor_voe(href, href) or "voe" in contenido_total:
+                    if es_servidor_voe(href, href) or re.search(r"\bvoe\b", contenido_total):
                         return "voe"
                     if "mixdrop" in contenido_total:
                         return "mixdrop"
@@ -566,7 +669,7 @@ def asegurar_permanencia_en_servidor(driver, enlace_descarga, servidor_esperado)
 
 
 def hacer_click_en_boton_descarga(
-    driver, enlace_descarga, download_dir, nombre_video, fuente
+    driver, enlace_descarga, download_dir, nombre_video, fuente, servidor_hint=None
 ):
     """Inicia una descarga y espera hasta confirmar
 
@@ -628,42 +731,64 @@ def hacer_click_en_boton_descarga(
                 f"⚠️ Tiempo de espera de redirección agotado en JKAnime: {e}"
             )
 
-        # Detectar servidor utilizando la URL FINAL a la que llegó el navegador
+        # Detectar el servidor: host de la URL final -> enlace original / pista
+        # -> firma de la página (VOE usa dominios rotativos).
         url_final = driver.current_url
-        servidor = detectar_servidor_descarga(url_final)
-        logging.info(
-            f"🌐 Servidor final detectado tras redirección: {servidor} (URL: {url_final})"
+        servidor, origen = detectar_servidor_final(
+            driver, url_final, enlace_descarga, servidor_hint
         )
+        logging.info(
+            f"🌐 Servidor final detectado tras redirección: {servidor} "
+            f"[{origen}] (URL: {url_final})"
+        )
+
+        # Hosts ya confirmados como del servidor (para no confundir un espejo
+        # nuevo de VOE con publicidad)
+        hosts_confirmados = set()
+        if servidor != "desconocido":
+            hosts_confirmados.add(_host_de_url(url_final))
 
         # --------------------------------------------------
         # 2b. Guardián Anti-Redirección Prematura
         # --------------------------------------------------
-        # Evita que el JS de la página secuestre la pestaña durante la carga inicial
+        # Evita que el JS de la página secuestre la pestaña durante la carga
+        # inicial. Compara por HOST (antes buscaba "voe" dentro de la URL y
+        # recargaba sin necesidad en los espejos de VOE) y vuelve a detectar
+        # el servidor tras cada recarga.
         for reintento in range(3):
             time.sleep(2)
-            url_actual = driver.current_url.lower()
+            url_actual = driver.current_url
 
-            # Dominios o palabras clave de publicidad agresiva
-            es_publicidad = any(
-                p in url_actual
-                for p in [
-                    "signaldefendgo",
-                    "clickid=",
-                    "pets/rabbits",
-                    "bdsclk",
-                    "trk=",
-                    "redirect",
-                ]
-            )
-
-            # Si la URL no contiene el nombre del servidor o cayó en publicidad
-            if es_publicidad or (servidor and servidor not in url_actual):
-                logging.warning(
-                    f"⚠️ Se detectó redirección publicitaria prematura ({url_actual[:45]}...). Volviendo a cargar enlace..."
-                )
-                driver.get(enlace_descarga)
-            else:
+            if (
+                not es_url_publicitaria(url_actual)
+                and url_es_del_servidor(url_actual, servidor, hosts_confirmados)
+            ):
                 break
+
+            logging.warning(
+                f"⚠️ Redirección publicitaria o página desconocida ({url_actual[:45]}...). "
+                f"Volviendo a cargar enlace ({reintento + 1}/3)..."
+            )
+            driver.get(enlace_descarga)
+
+            try:
+                WebDriverWait(driver, 15).until(
+                    lambda d: d.execute_script("return document.readyState")
+                    == "complete"
+                )
+            except Exception:
+                pass
+            time.sleep(3)
+
+            url_final = driver.current_url
+            servidor, origen = detectar_servidor_final(
+                driver, url_final, enlace_descarga, servidor_hint
+            )
+            logging.info(
+                f"🌐 Servidor tras recarga: {servidor} [{origen}] (URL: {url_final})"
+            )
+            if servidor != "desconocido" and not es_url_publicitaria(url_final):
+                hosts_confirmados.add(_host_de_url(url_final))
 
         # --------------------------------------------------
         # 3. Validación previa (Archivo caído)
@@ -999,6 +1124,8 @@ def hacer_click_en_boton_descarga(
         # --------------------------------------------------
         if archivo_descargado:
             logging.info(f"✅ DESCARGA COMPLETADA: {nombre_video}")
+            if servidor == "voe":
+                registrar_dominio_voe(url_final)
             logging.info(
                 f"📁 Archivo: {os.path.basename(archivo_descargado)}"
             )
@@ -1048,7 +1175,8 @@ def descargar_video_con_reintentos(
                 video["link_descarga"],
                 download_dir,
                 video["nombre"],
-                video.get('fuente')
+                video.get('fuente'),
+                servidor_hint=video.get("servidor_seleccionado")
             )
 
             # Si la descarga fue exitosa
@@ -1150,7 +1278,7 @@ def validar_servidor(driver, servidor, enlace):
     return validar_enlace_generico(driver, enlace)
 
 
-def validar_todos_los_servidores(driver, video, servidores_bloqueados=None):
+def validar_todos_los_servidores(driver, video, servidores_bloqueados=None, servidores_penalizados=None):
     """
     Valida CADA servidor que ofrece la fuente (no se detiene en el primero).
 
@@ -1193,6 +1321,14 @@ def validar_todos_los_servidores(driver, video, servidores_bloqueados=None):
         else:
             logging.warning(f"   ❌ '{nombre}' caído o inaccesible")
 
+    # Servidores "penalizados" (p. ej. Mega sin cuota ahora): siguen siendo
+    # válidos pero quedan al final, para preferir cualquier otro.
+    penalizados = {p.lower() for p in (servidores_penalizados or set())}
+    if penalizados:
+        validos.sort(key=lambda c: (
+            nombre_servidor_desde_url(c["enlace"]) in penalizados
+            or str(c["servidor"]).lower() in penalizados))
+
     video["servidores_validos"] = validos
 
     if not validos:
@@ -1205,7 +1341,8 @@ def validar_todos_los_servidores(driver, video, servidores_bloqueados=None):
     return True
 
 
-def evaluar_video_de_fuente(driver, video, nombre_esperado, episodio_esperado, servidores_bloqueados=None):
+def evaluar_video_de_fuente(driver, video, nombre_esperado, episodio_esperado, servidores_bloqueados=None,
+                            servidores_penalizados=None):
     """
     Evalúa el resultado de UNA fuente:
         1) ¿es el anime/temporada/episodio correcto?
@@ -1236,20 +1373,263 @@ def evaluar_video_de_fuente(driver, video, nombre_esperado, episodio_esperado, s
         if enlace_dl:
             video["link_descarga"] = enlace_dl
 
-    if validar_todos_los_servidores(driver, video, servidores_bloqueados):
+    if validar_todos_los_servidores(driver, video, servidores_bloqueados, servidores_penalizados):
         return True, "ok"
 
     return False, "ningún servidor disponible"
 
 
-def buscar_fuente_alternativa(driver, nombre, episodio, lista_excluidas, download_dir, servidores_bloqueados=None):
+# ==========================================
+# ESCRITURA SEGURA EN SHEETS + MEMORIA DE FUENTES FALLIDAS
+# ==========================================
+
+ARCHIVO_FUENTES_FALLIDAS = "fuentes_fallidas.json"
+FUENTES_FALLIDAS_TTL_HORAS = 24   # pasado este tiempo, una fuente fallida se vuelve a probar
+
+
+def _ahora():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def actualizar_sheet(**kwargs):
+    """
+    Envoltorio de actualizar_estado_google_sheets:
+      - la fecha SIEMPRE viaja como texto 'YYYY-MM-DD HH:MM:SS' (si no se pasó, se pone la actual),
+      - nunca se envía un booleano como valor de celda (un True se vería como "TRUE"),
+      - deja en el log exactamente lo que se envía a la hoja.
+    """
+    kwargs.setdefault("nombre_hoja", "Animes")
+
+    # Un parámetro en None equivale a "no enviarlo" (como antes)
+    for clave in [k for k, v in kwargs.items() if v is None]:
+        del kwargs[clave]
+
+    fecha = kwargs.get("fecha_actualizacion")
+    if not isinstance(fecha, str) or not fecha.strip():
+        kwargs["fecha_actualizacion"] = _ahora()
+
+    for clave, valor in list(kwargs.items()):
+        if clave in ("sheet_service", "nombre_hoja", "crear_si_no_existe"):
+            continue
+        if isinstance(valor, bool):
+            logging.warning(
+                f"⚠️ Se descartó un booleano en '{clave}' para no escribir TRUE/FALSE en la hoja.")
+            del kwargs[clave]
+        elif clave in ("nuevo_enlace", "nueva_fuente", "fuentes_fallidas", "nuevo_estado") \
+                and valor is not None and not isinstance(valor, str):
+            kwargs[clave] = str(valor)
+
+    enviado = ", ".join(
+        f"{k}={v!r}" for k, v in kwargs.items() if k != "sheet_service")
+    logging.info(f"📝 Sheets ← {enviado}")
+
+    return actualizar_estado_google_sheets(**kwargs)
+
+
+def _unir_fuentes(*listas):
+    """Une listas (o cadenas 'A, B') de fuentes sin repetir (ignora mayúsculas), conservando el orden."""
+    vistos, resultado = set(), []
+    for lista in listas:
+        if isinstance(lista, str):
+            lista = lista.split(",")
+        for f in lista or []:
+            f = str(f).strip()
+            if f and f.lower() not in vistos:
+                vistos.add(f.lower())
+                resultado.append(f)
+    return resultado
+
+
+def _leer_json_fuentes():
+    try:
+        if os.path.exists(ARCHIVO_FUENTES_FALLIDAS):
+            with open(ARCHIVO_FUENTES_FALLIDAS, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        logging.warning(f"⚠️ No se pudo leer {ARCHIVO_FUENTES_FALLIDAS}: {e}")
+    return {}
+
+
+def _escribir_json_fuentes(datos):
+    try:
+        with open(ARCHIVO_FUENTES_FALLIDAS, "w", encoding="utf-8") as f:
+            json.dump(datos, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        logging.warning(f"⚠️ No se pudo guardar {ARCHIVO_FUENTES_FALLIDAS}: {e}")
+
+
+def cargar_fuentes_fallidas(nombre, episodio):
+    """
+    Fuentes que ya fallaron para ESTE episodio. Se guardan en disco además de
+    en Sheets para no depender de cómo se lea esa columna y así no volver a
+    una fuente que ya falló (rebote A -> B -> A).
+    """
+    registro = _leer_json_fuentes().get(_clave_episodio(nombre, episodio))
+    if not registro:
+        return []
+    try:
+        antiguedad = datetime.now() - datetime.strptime(
+            registro.get("actualizado", ""), "%Y-%m-%d %H:%M:%S")
+        if antiguedad.total_seconds() > FUENTES_FALLIDAS_TTL_HORAS * 3600:
+            return []
+    except Exception:
+        pass
+    return registro.get("fuentes", [])
+
+
+def guardar_fuentes_fallidas(nombre, episodio, fuentes):
+    datos = _leer_json_fuentes()
+    datos[_clave_episodio(nombre, episodio)] = {
+        "fuentes": _unir_fuentes(fuentes),
+        "actualizado": _ahora(),
+    }
+    _escribir_json_fuentes(datos)
+
+
+def borrar_fuentes_fallidas(nombre, episodio):
+    datos = _leer_json_fuentes()
+    if datos.pop(_clave_episodio(nombre, episodio), None) is not None:
+        _escribir_json_fuentes(datos)
+
+
+def _acumular_bitacora(bitacora, entradas):
+    """Agrega (fuente, estado) a la bitácora; el estado más informativo gana sobre 'excluida'."""
+    for fuente, estado in entradas or []:
+        existente = next((i for i, (f, _) in enumerate(bitacora) if f.lower() == str(fuente).lower()), None)
+        if existente is None:
+            bitacora.append((str(fuente), str(estado)))
+        elif not str(estado).startswith("excluida"):
+            bitacora[existente] = (str(fuente), str(estado))
+
+
+def resumen_fuentes_html(bitacora):
+    """Texto para Telegram con TODAS las fuentes consultadas y qué pasó con cada una."""
+    if not bitacora:
+        return ""
+    lineas = [f"• {html.escape(str(f))}: {html.escape(str(e))}" for f, e in bitacora]
+    return "🔎 <b>Fuentes consultadas:</b>\n" + "\n".join(lineas) + "\n"
+
+
+# ==========================================
+# ESTADO COMPARTIDO DE SERVIDORES (CUOTA) Y RESUMEN DE LA NUBE
+# ==========================================
+#
+# La cuota de transferencia de Mega es de la IP que DESCARGA, y solo se puede
+# comprobar de verdad al pulsar "Descargar". La fase local la detecta y la
+# anota aquí; la fase nube la consulta para no dejar como "válido" un enlace de
+# Mega que ahora mismo no se puede bajar (y para preferir otro servidor).
+# Si ambas fases corren en máquinas distintas, este archivo debe compartirse.
+
+ARCHIVO_ESTADO_SERVIDORES = "estado_servidores.json"
+CUOTA_SERVIDOR_HORAS = 6          # cuánto se considera "sin cuota" tras detectarlo
+ENVIAR_RESUMEN_NUBE = True        # pon False si base_excel ya envía un resumen propio
+
+
+def marcar_servidor_sin_cuota(servidor):
+    """Anota que un servidor ('mega') se quedó sin cuota AHORA (detectado al descargar)."""
+    try:
+        datos = {}
+        if os.path.exists(ARCHIVO_ESTADO_SERVIDORES):
+            with open(ARCHIVO_ESTADO_SERVIDORES, "r", encoding="utf-8") as f:
+                datos = json.load(f)
+        datos[servidor] = _ahora()
+        with open(ARCHIVO_ESTADO_SERVIDORES, "w", encoding="utf-8") as f:
+            json.dump(datos, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        logging.warning(f"⚠️ No se pudo guardar el estado de cuota de {servidor}: {e}")
+
+
+def servidores_sin_cuota_vigentes():
+    """Servidores marcados sin cuota hace menos de CUOTA_SERVIDOR_HORAS."""
+    vigentes = set()
+    try:
+        if not os.path.exists(ARCHIVO_ESTADO_SERVIDORES):
+            return vigentes
+        with open(ARCHIVO_ESTADO_SERVIDORES, "r", encoding="utf-8") as f:
+            datos = json.load(f)
+        for servidor, marca in datos.items():
+            try:
+                horas = (datetime.now() - datetime.strptime(
+                    marca, "%Y-%m-%d %H:%M:%S")).total_seconds() / 3600
+                if horas < CUOTA_SERVIDOR_HORAS:
+                    vigentes.add(servidor)
+            except Exception:
+                continue
+    except Exception as e:
+        logging.warning(f"⚠️ No se pudo leer el estado de cuota: {e}")
+    return vigentes
+
+
+def _anotar(resumen, clave, nombre, episodio, **datos):
+    """Registra un hecho para el resumen final de la nube."""
+    if resumen is None:
+        return
+    resumen.setdefault(clave, []).append(
+        {"nombre": nombre, "episodio": episodio, **datos})
+
+
+def _texto_resumen_nube(resumen, maximo):
+    e = lambda x: html.escape(str(x if x is not None else ""))
+    base = lambda i: f"• <b>{e(i['nombre'])}</b> — Ep. {e(i['episodio'])}"
+
+    def lista(items, extra=None):
+        lineas = [base(i) + (extra(i) if extra else "") for i in items[:maximo]]
+        if len(items) > maximo:
+            lineas.append(f"… y {len(items) - maximo} más")
+        return "\n".join(lineas)
+
+    secciones = []
+
+    def seccion(titulo, clave, extra=None):
+        items = resumen.get(clave) or []
+        if items:
+            secciones.append(f"{titulo} ({len(items)})\n{lista(items, extra)}")
+
+    seccion("✅ <b>Listos para descargar</b>", "nuevos",
+            lambda i: f" · {e(i.get('servidor'))} ({e(i.get('fuente'))})"
+            + (f" ↩ tras descartar {e(i['descartadas'])}" if i.get("descartadas") else ""))
+    seccion("🔁 <b>Enlaces revalidados (siguen válidos)</b>", "revalidados",
+            lambda i: f" · {e(i.get('servidor'))} ({e(i.get('fuente'))})")
+    seccion("🔄 <b>Enlaces cambiados</b>", "cambiados",
+            lambda i: f": {e(i.get('antes'))} → <b>{e(i.get('ahora'))}</b> ({e(i.get('fuente'))}) · {e(i.get('motivo'))}")
+    seccion("⏳ <b>En espera de cuota</b>", "esperando_cuota",
+            lambda i: f" · {e(i.get('servidor'))} ({e(i.get('fuente'))})")
+    seccion("🚨 <b>Sin fuentes</b>", "sin_fuentes",
+            lambda i: f" · probadas: {e(i.get('fuentes'))}" if i.get("fuentes") else "")
+    seccion("🔍 <b>Aún no encontrados</b>", "no_encontrados")
+
+    if not secciones:
+        return ""
+    return "☁️ <b>Resumen de la nube</b>\n\n" + "\n\n".join(secciones)
+
+
+def enviar_resumen_nube(resumen):
+    """Mensaje final de Telegram con todo lo que hizo la nube en este ciclo."""
+    if not ENVIAR_RESUMEN_NUBE:
+        return
+    for maximo in (8, 4, 2):          # Telegram admite ~4096 caracteres
+        texto = _texto_resumen_nube(resumen, maximo)
+        if len(texto) <= 3900:
+            break
+    if texto:
+        enviar_mensaje_telegram(texto)
+
+
+def buscar_fuente_alternativa(driver, nombre, episodio, lista_excluidas, download_dir,
+                              servidores_bloqueados=None, bitacora=None,
+                              servidores_penalizados=None, persistir=True):
     """
     Recorre las fuentes restantes hasta encontrar una que:
       - devuelva el anime/temporada/episodio correcto, y
       - tenga al menos un servidor disponible.
-    Modifica 'lista_excluidas' agregando cada fuente descartada.
+    Modifica 'lista_excluidas' agregando cada fuente descartada (y la guarda en
+    disco). 'bitacora' (lista) recibe (fuente, qué pasó) de TODAS las fuentes
+    consultadas, para poder mostrar cuáles se probaron realmente.
     Devuelve el video válido o None si se agotaron las fuentes.
     """
+    if bitacora is None:
+        bitacora = []
+
     while True:
         logging.info(
             f"🚫 Fuentes descartadas: {', '.join(lista_excluidas) or 'ninguna'}")
@@ -1260,6 +1640,9 @@ def buscar_fuente_alternativa(driver, nombre, episodio, lista_excluidas, downloa
             excluir_fuente=lista_excluidas,
             download_dir=download_dir,
         )
+
+        _acumular_bitacora(
+            bitacora, getattr(buscar_en_fuentes, "ultimo_resumen", []))
 
         if not encontrados:
             return None
@@ -1276,18 +1659,23 @@ def buscar_fuente_alternativa(driver, nombre, episodio, lista_excluidas, downloa
             hubo_nuevas = True
 
             valido, motivo = evaluar_video_de_fuente(
-                driver, v_alt, nombre, episodio, servidores_bloqueados)
+                driver, v_alt, nombre, episodio, servidores_bloqueados,
+                servidores_penalizados)
 
             if valido:
                 logging.info(
                     f"✅ Fuente alternativa '{fuente_alt}' válida "
                     f"({v_alt.get('servidor_seleccionado')}) para: {nombre}"
                 )
+                _acumular_bitacora(bitacora, [(fuente_alt, "válida")])
                 return v_alt
 
             logging.error(f"❌ Fuente '{fuente_alt}' descartada: {motivo}")
             lista_excluidas.append(fuente_alt)
             excluidas_lower.add(str(fuente_alt).lower())
+            if persistir:
+                guardar_fuentes_fallidas(nombre, episodio, lista_excluidas)
+            _acumular_bitacora(bitacora, [(fuente_alt, f"descartada: {motivo}")])
 
         if not hubo_nuevas:
             return None
@@ -1325,8 +1713,21 @@ def guardar_servidores_alternos(nombre, episodio, fuente, servidores):
         logging.warning(f"⚠️ No se pudieron guardar servidores alternos: {e}")
 
 
-def cargar_servidores_alternos(nombre, episodio, fuente):
-    """Servidores ya validados de ESA misma fuente para ese episodio."""
+def _servidor_desde_cache(nombre, episodio, fuente, enlace):
+    """Nombre del servidor ('Mega', 'VOE'...) de un enlace ya validado en la fase nube."""
+    for srv in cargar_servidores_alternos(nombre, episodio, fuente, {enlace}):
+        if srv.get("enlace") == enlace:
+            return srv.get("servidor")
+    return None
+
+
+def cargar_servidores_alternos(nombre, episodio, fuente, enlaces_conocidos=None):
+    """
+    Servidores de la MISMA fuente para ese episodio.
+    Se aceptan si coincide la fuente O si alguno de los 'enlaces_conocidos'
+    (p. ej. el enlace que está fallando) figura en la lista guardada; así no
+    depende de que la fila de Sheets traiga bien escrito el nombre de la fuente.
+    """
     try:
         if not os.path.exists(ARCHIVO_SERVIDORES_ALTERNOS):
             return []
@@ -1336,13 +1737,50 @@ def cargar_servidores_alternos(nombre, episodio, fuente):
         registro = datos.get(_clave_episodio(nombre, episodio))
         if not registro:
             return []
-        if str(registro.get("fuente", "")).lower() != str(fuente or "").lower():
+
+        servidores = registro.get("servidores", [])
+        coincide_fuente = (
+            str(registro.get("fuente", "")).lower() == str(fuente or "").lower())
+        enlaces_guardados = {srv.get("enlace") for srv in servidores}
+        coincide_enlace = any(
+            e in enlaces_guardados for e in (enlaces_conocidos or []) if e)
+
+        if not (coincide_fuente or coincide_enlace):
             return []
-        return registro.get("servidores", [])
+        return servidores
 
     except Exception as e:
         logging.warning(f"⚠️ No se pudieron leer servidores alternos: {e}")
         return []
+
+
+def refrescar_servidores_de_fuente(nombre, episodio, fuente, download_dir):
+    """
+    Si no hay servidores alternos guardados (enlace registrado por una versión
+    anterior, o la fase nube corre en otra máquina), vuelve a consultar SOLO esa
+    fuente para recuperar todos sus servidores. Se validan uno a uno al usarlos.
+    """
+    otras = [str(f.get("nombre")) for f in FUENTES_ANIME
+             if f.get("nombre") and str(f["nombre"]).lower() != str(fuente).lower()]
+    try:
+        encontrados = buscar_en_fuentes(
+            [{"nombre": nombre, "episodio_buscado": episodio}],
+            FUENTES_ANIME,
+            excluir_fuente=otras,
+            download_dir=download_dir,
+        )
+    except Exception as e:
+        logging.warning(f"⚠️ No se pudo refrescar los servidores de '{fuente}': {e}")
+        return []
+
+    for v in encontrados:
+        if str(v.get("fuente", "")).lower() != str(fuente).lower():
+            continue
+        candidatos = recopilar_servidores_candidatos(v)
+        if candidatos:
+            guardar_servidores_alternos(nombre, episodio, fuente, candidatos)
+            return candidatos
+    return []
 
 
 # ==========================================
@@ -1420,18 +1858,163 @@ def validar_enlace_mega(driver, enlace):
         return False  # Si hubo un error de red o carga, consideramos que falló
 
 
+ESTADOS_FINALES = {"COMPLETADO", "DESCARGADO"}
+ESTADOS_REVALIDAR = {"PENDIENTE", "CUOTA AGOTADA"}
+ESTADOS_REBUSCAR = {"CAMBIAR FUENTE", "SIN FUENTES", "ARCHIVO CAÍDO", "ARCHIVO CAIDO"}
+
+
+def _ep_limpio(ep):
+    return int(ep) if str(ep).strip().isdigit() else ep
+
+
+def revalidar_registro_en_sheets(driver, sheet_service, registro, download_dir, sin_cuota, resumen):
+    """
+    Un episodio que YA está en Sheets como Pendiente: se valida su enlace.
+
+      1) Enlace sano                      -> se deja tal cual.
+      2) Archivo caído / sin enlace       -> otro servidor de la MISMA fuente;
+                                             si no hay, otra fuente (con todos sus servidores validados).
+      3) Mega sin cuota (temporal)        -> igual, pero si no hay alternativa queda Pendiente
+                                             (no se marca la fuente como fallida).
+
+    Devuelve: 'ok' | 'cambio_servidor' | 'cambio_fuente' | 'esperando_cuota' | 'sin_fuentes'.
+    """
+    nombre = registro.get("nombre")
+    episodio = _ep_limpio(registro.get("episodio"))
+    link = registro.get("enlace")
+    fuente = registro.get("fuente") or "Desconocida"
+    estado_hoja = str(registro.get("estado", "")).strip()
+
+    fallidas = _unir_fuentes(
+        registro.get("fuentes_fallidas") or registro.get("fuente_fallida"),
+        cargar_fuentes_fallidas(nombre, episodio),
+    )
+
+    servidor_key = nombre_servidor_desde_url(link)
+    servidor_txt = nombre_servidor_legible(None, link)
+    fecha = _ahora()
+
+    # ---------------- 1. ¿cómo está el enlace? ----------------
+    if not link or link == "No encontrado":
+        motivo = "Sin enlace"
+    elif not validar_servidor(driver, servidor_key, link):
+        motivo = "Archivo Caído"
+    elif servidor_key in sin_cuota:
+        motivo = "Cuota Agotada"
+    else:
+        motivo = None
+
+    if motivo is None:
+        logging.info(f"✅ Enlace vigente ({servidor_txt}) para {nombre} Ep {episodio}.")
+        if estado_hoja.upper() != "PENDIENTE":
+            actualizar_sheet(
+                sheet_service=sheet_service, nombre_anime=nombre, episodio=episodio,
+                nuevo_estado="Pendiente", fecha_actualizacion=fecha)
+        _anotar(resumen, "revalidados", nombre, episodio, servidor=servidor_txt, fuente=fuente)
+        return "ok"
+
+    logging.warning(f"⚠️ {motivo} en {servidor_txt} ({fuente}) para {nombre} Ep {episodio}. Buscando reemplazo...")
+
+    # ---------------- 2. otro servidor de la MISMA fuente ----------------
+    temporal = (motivo == "Cuota Agotada")
+    ref = {"fuente": fuente, "link_descarga": link}
+
+    # Se prefiere un servidor sin problemas de cuota...
+    s_alt = _siguiente_servidor_misma_fuente(
+        driver, ref, nombre, episodio, {link}, sin_cuota, download_dir)
+    # ...pero si el enlace está CAÍDO de verdad, un Mega con cuota agotada (temporal)
+    # sigue siendo mejor que nada: se acepta y el episodio espera a que haya cuota.
+    if not s_alt and not temporal:
+        s_alt = _siguiente_servidor_misma_fuente(
+            driver, ref, nombre, episodio, {link}, set(), download_dir)
+
+    if s_alt:
+        actualizar_sheet(
+            sheet_service=sheet_service, nombre_anime=nombre, episodio=episodio,
+            nuevo_enlace=s_alt["enlace"], nueva_fuente=fuente,
+            fuentes_fallidas=", ".join(fallidas) or None,
+            nuevo_estado="Pendiente", fecha_actualizacion=fecha)
+        nuevo_srv = nombre_servidor_legible(s_alt.get("servidor"), s_alt["enlace"])
+        _notificar_cambio(nombre, episodio, motivo, servidor_txt, fuente, nuevo_srv, fuente, misma_fuente=True)
+        _anotar(resumen, "cambiados", nombre, episodio,
+                antes=servidor_txt, ahora=nuevo_srv, fuente=fuente, motivo=motivo)
+        return "cambio_servidor"
+
+    # ---------------- 3. otra fuente ----------------
+    temporal = (motivo == "Cuota Agotada")
+    excluidas = _unir_fuentes(fallidas, [fuente])
+    if not temporal:
+        guardar_fuentes_fallidas(nombre, episodio, excluidas)
+    bitacora = [(fuente, f"falló: {motivo}")]
+
+    v = buscar_fuente_alternativa(
+        driver, nombre, episodio, excluidas, download_dir,
+        # Enlace caído: Mega sin cuota solo se penaliza (queda al final), no se descarta.
+        # Cuota agotada: se busca explícitamente algo que NO sea ese servidor.
+        servidores_bloqueados=sin_cuota if temporal else None,
+        servidores_penalizados=sin_cuota,
+        bitacora=bitacora, persistir=not temporal)
+
+    if v:
+        v["estado"] = "Pendiente"
+        v["fuentes_fallidas"] = ", ".join(fallidas if temporal else excluidas)
+        _registrar_video_valido(
+            sheet_service, v, nombre, episodio, fecha,
+            fuentes_fallidas=v["fuentes_fallidas"], prefijo_captura="Link Alterno ")
+        nuevo_srv = nombre_servidor_legible(v.get("servidor_seleccionado"), v.get("link_descarga"))
+        _notificar_cambio(nombre, episodio, motivo, servidor_txt, fuente, nuevo_srv, v.get("fuente"))
+        _anotar(resumen, "cambiados", nombre, episodio,
+                antes=servidor_txt, ahora=nuevo_srv, fuente=v.get("fuente"), motivo=motivo)
+        return "cambio_fuente"
+
+    if temporal:
+        logging.warning(f"⏳ {servidor_txt} sin cuota y sin alternativas para {nombre} Ep {episodio}: se deja Pendiente.")
+        if estado_hoja.upper() != "PENDIENTE":
+            actualizar_sheet(
+                sheet_service=sheet_service, nombre_anime=nombre, episodio=episodio,
+                nuevo_estado="Pendiente", fecha_actualizacion=fecha)
+        _anotar(resumen, "esperando_cuota", nombre, episodio, servidor=servidor_txt, fuente=fuente)
+        return "esperando_cuota"
+
+    # Sin alternativas y el enlace está caído de verdad
+    cadena = ", ".join(excluidas)
+    actualizar_sheet(
+        sheet_service=sheet_service, nombre_anime=nombre, episodio=episodio,
+        fuentes_fallidas=cadena, nuevo_estado="Sin Fuentes", fecha_actualizacion=fecha)
+    enviar_mensaje_telegram(
+        f"🚨 <b>Alerta:</b> Se agotaron todas las fuentes para: "
+        f"<b>{html.escape(str(nombre))} Episodio {html.escape(str(episodio))}</b>\n"
+        f"📝 Fuentes probadas: {html.escape(cadena)}\n"
+        f"{resumen_fuentes_html(bitacora)}"
+        "⏱️ Marcado como 'Sin Fuentes'. Se reintentará en el próximo ciclo."
+    )
+    _anotar(resumen, "sin_fuentes", nombre, episodio, fuentes=cadena)
+    return "sin_fuentes"
+
+
 def flujo_descarga_animes(file_name, download_dir):
+    """
+    Flujo de la nube:
+      1) Saca TODOS los episodios pendientes.
+      2) Los cruza con Google Sheets:
+           - Completado               -> se omite.
+           - Ya está como Pendiente   -> se VALIDA su enlace (archivo caído / cuota de Mega);
+                                         si falla, se busca reemplazo.
+           - Cambiar Fuente / Sin Fuentes -> se vuelve a buscar (excluyendo las fuentes fallidas).
+           - No está                  -> se busca en las fuentes y se valida el enlace.
+      3) Resumen final por Telegram.
+    """
+    resumen = {}
 
-    mensaje_telegram = ""
-
-    # Leer los datos desde el archivo .json / .txt
+    # ---------------------------------------------------------------
+    # 1. Todos los pendientes
+    # ---------------------------------------------------------------
     datos_crudos = leer_nombres_desde_txt(file_name)
 
     if not datos_crudos:
         logging.error("❌ No hay animes pendientes para buscar.")
         return False
 
-    # 2. Expandir los animes según sus episodios pendientes PRIMERO
     animes_a_expandir = []
 
     for item in datos_crudos:
@@ -1441,10 +2024,9 @@ def flujo_descarga_animes(file_name, download_dir):
 
         if pendientes > 0:
             for i in range(1, pendientes + 1):
-                ep_buscado = episodio_actual + i
                 animes_a_expandir.append({
                     "nombre": nombre,
-                    "episodio_buscado": ep_buscado
+                    "episodio_buscado": episodio_actual + i
                 })
         else:
             animes_a_expandir.append(item)
@@ -1453,95 +2035,153 @@ def flujo_descarga_animes(file_name, download_dir):
         logging.error("❌ No hay episodios pendientes para procesar.")
         return False
 
-    # ☁️ FILTRO INTELIGENTE DE GOOGLE SHEETS (Nombre + Episodio)
-    # ==================================================================
-    logging.info(
-        "☁️ Conectando con Google Sheets para verificar el historial previo...")
+    # ---------------------------------------------------------------
+    # 2. Cruce con Google Sheets
+    # ---------------------------------------------------------------
+    logging.info("☁️ Conectando con Google Sheets para verificar el historial previo...")
     sheet_service = obtener_conexion_google_sheets()
 
-    # ⚠️ IMPORTANTE: Debe leer TODAS las filas de Sheets (incluyendo 'Completado')
-    # Si 'leer_animes_pendientes' filtra antes, usa una función que traiga la hoja completa.
-    animes_en_sheet = leer_animes_pendientes(
-        sheet_service) if sheet_service else []
+    # ⚠️ Debe devolver TODAS las filas (incluidas las 'Completado')
+    animes_en_sheet = leer_animes_pendientes(sheet_service) if sheet_service else []
 
-    animes_a_buscar = []
+    nuevos, a_revalidar, a_rebuscar = [], [], []
 
     for anime_obj in animes_a_expandir:
-        nombre_obj = anime_obj.get("nombre", "").strip().lower()
+        nombre_obj = str(anime_obj.get("nombre", "")).strip().lower()
         ep_obj = str(anime_obj.get("episodio_buscado", "")).strip()
 
-        # Busca si ESTE capítulo exacto (ej. Ep 10) ya tiene un registro en Sheets
-        registro_existente = next(
+        registro = next(
             (a for a in animes_en_sheet
-             if a["nombre"].strip().lower() == nombre_obj and str(a["episodio"]).strip() == ep_obj),
+             if str(a["nombre"]).strip().lower() == nombre_obj
+             and str(a["episodio"]).strip() == ep_obj),
             None
         )
 
-        if not registro_existente:
-            # Caso A: El episodio NO existe en Sheets -> Se debe buscar
-            animes_a_buscar.append(anime_obj)
-        else:
-            estado = registro_existente.get("estado", "").strip().upper()
+        if not registro:
+            anime_obj["_estado_hoja"] = ""
+            nuevos.append(anime_obj)
+            continue
 
-            # Caso B: Si requiere Cambiar Fuente -> Se procesa
-            if estado in ["CAMBIAR FUENTE"]:
-                if registro_existente.get("fuente_fallida"):
-                    anime_obj["fuente_fallida"] = registro_existente.get(
-                        "fuente_fallida")
-                animes_a_buscar.append(anime_obj)
+        estado = str(registro.get("estado", "")).strip().upper()
+
+        if estado in ESTADOS_FINALES:
+            logging.info(
+                f"⏩ Omitiendo '{anime_obj.get('nombre')}' (Ep. {ep_obj}): ya está '{registro.get('estado')}' en Google Sheets.")
+        elif estado in ESTADOS_REVALIDAR:
+            a_revalidar.append(registro)
+        elif estado in ESTADOS_REBUSCAR:
+            anime_obj["_estado_hoja"] = estado
+            if estado == "SIN FUENTES":
+                # Se reintenta con todas las fuentes (puede haber salido el episodio)
+                anime_obj["fuente_fallida"] = ""
+                borrar_fuentes_fallidas(anime_obj.get("nombre"), anime_obj.get("episodio_buscado"))
             else:
-                # Caso C: Estado 'COMPLETADO', 'DESCARGADO', etc. -> Se omite
-                logging.info(
-                    f"⏩ Omitiendo '{anime_obj.get('nombre')}' (Ep. {ep_obj}): Ya registrado como '{registro_existente.get('estado')}' en Google Sheets."
-                )
+                anime_obj["fuente_fallida"] = (
+                    registro.get("fuentes_fallidas") or registro.get("fuente_fallida") or "")
+            a_rebuscar.append(anime_obj)
+        else:
+            logging.info(
+                f"⏩ Omitiendo '{anime_obj.get('nombre')}' (Ep. {ep_obj}): estado '{registro.get('estado')}' no gestionado.")
 
-    if not animes_a_buscar:
-        logging.info(
-            "✅ Todos los episodios pendientes ya estaban descargados en Google Sheets."
-        )
-        mensaje = "✅ <b>Animes al día</b>\nTodos los episodios pendientes ya se encuentran descargados."
-        enviar_mensaje_telegram(mensaje)
+    if not (nuevos or a_revalidar or a_rebuscar):
+        logging.info("✅ Todos los episodios pendientes ya estaban descargados en Google Sheets.")
+        enviar_mensaje_telegram(
+            "✅ <b>Animes al día</b>\nTodos los episodios pendientes ya se encuentran descargados.")
         return False
-    # ==================================================================
 
-    # Paso 1: Buscar videos relacionados únicamente con los que pasaron el filtro
-    logging.info("Buscando videos relacionados...")
-    videos_encontrados = buscar_en_fuentes(
-        animes_a_buscar,
-        FUENTES_ANIME,
-        download_dir=download_dir
-    )
+    sin_cuota = servidores_sin_cuota_vigentes()
+    if sin_cuota:
+        logging.info(f"⏳ Servidores sin cuota (vigente): {', '.join(sorted(sin_cuota))}")
+
+    # ---------------------------------------------------------------
+    # 2b. Los que YA están como Pendiente: validar el enlace
+    # ---------------------------------------------------------------
+    if a_revalidar:
+        logging.info(f"🔁 Revalidando enlaces de {len(a_revalidar)} episodio(s) ya registrado(s)...")
+        driver = configurar_navegador(download_dir)
+
+        if driver is None:
+            logging.error("❌ No se pudo iniciar el navegador para revalidar los enlaces.")
+        else:
+            try:
+                for registro in a_revalidar:
+                    try:
+                        revalidar_registro_en_sheets(
+                            driver, sheet_service, registro, download_dir, sin_cuota, resumen)
+                    except Exception as e:
+                        logging.error(
+                            f"❌ Error revalidando {registro.get('nombre')} Ep {registro.get('episodio')}: {e}")
+            finally:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+
+    # ---------------------------------------------------------------
+    # 3. Los nuevos (y los de 'Cambiar Fuente' / 'Sin Fuentes'): buscar en las fuentes
+    # ---------------------------------------------------------------
+    por_buscar = nuevos + a_rebuscar
+    videos_encontrados = []
+
+    if por_buscar:
+        logging.info(f"Buscando {len(por_buscar)} episodio(s) en las fuentes...")
+
+    for anime_obj in por_buscar:
+        nombre_a = anime_obj.get("nombre")
+        ep_a = anime_obj.get("episodio_buscado", anime_obj.get("episodio_actual"))
+
+        # Se excluyen las fuentes que ya fallaron para ESTE episodio
+        previas = _unir_fuentes(
+            anime_obj.get("fuente_fallida"),
+            cargar_fuentes_fallidas(nombre_a, ep_a),
+        )
+
+        encontrados_anime = buscar_en_fuentes(
+            [anime_obj],
+            FUENTES_ANIME,
+            excluir_fuente=previas or None,
+            download_dir=download_dir
+        )
+
+        for v in encontrados_anime:
+            v["fuentes_fallidas"] = ", ".join(previas)
+
+        videos_encontrados.extend(encontrados_anime)
+
+        if not encontrados_anime:
+            estado_hoja = anime_obj.get("_estado_hoja", "")
+            if estado_hoja == "CAMBIAR FUENTE":
+                # Ya había una fuente fallida y no hay ninguna otra con el episodio
+                cadena = ", ".join(previas)
+                if sheet_service:
+                    actualizar_sheet(
+                        sheet_service=sheet_service, nombre_anime=nombre_a, episodio=_ep_limpio(ep_a),
+                        fuentes_fallidas=cadena or None, nuevo_estado="Sin Fuentes",
+                        fecha_actualizacion=_ahora())
+                _anotar(resumen, "sin_fuentes", nombre_a, ep_a, fuentes=cadena)
+            elif estado_hoja == "":
+                _anotar(resumen, "no_encontrados", nombre_a, ep_a)
 
     with open("videos_encontrados.txt", "w", encoding="utf-8") as archivo_txt:
-        json.dump(videos_encontrados, archivo_txt,
-                  ensure_ascii=False, indent=4)
+        json.dump(videos_encontrados, archivo_txt, ensure_ascii=False, indent=4)
 
-    # ==================================================================
-    # 📲 NOTIFICACIÓN SI NO SE ENCONTRARON VIDEOS
-    # ==================================================================
-    if not videos_encontrados:
-        lineas = [
-            "⚠️ <b>No se encontraron episodios en la búsqueda</b>\n",
-            "<b>Episodios consultados sin resultados:</b>"
-        ]
+    # ---------------------------------------------------------------
+    # 4. Validar los enlaces de lo encontrado y registrarlo en Sheets
+    # ---------------------------------------------------------------
+    videos_validos = []
+    if videos_encontrados:
+        resultado = proceso_nube_buscar_y_guardar_sheets(
+            download_dir, videos_encontrados, resumen=resumen)
+        videos_validos = resultado or []
+    else:
+        logging.info("No se encontraron videos nuevos para los animes indicados.")
 
-        for item in animes_a_buscar:
-            # html.escape evita errores en Telegram si el nombre contiene '<', '>' o '&'
-            nombre = html.escape(str(item.get("nombre", "Sin nombre")))
-            ep = item.get("episodio_buscado", item.get("episodio_actual", "?"))
-            lineas.append(f"• <b>{nombre}</b> — Ep. {ep}")
+    # ---------------------------------------------------------------
+    # 5. Resumen por Telegram
+    # ---------------------------------------------------------------
+    enviar_resumen_nube(resumen)
 
-        mensaje_telegram = "\n".join(lineas)
-
-        logging.info("No se encontraron videos para los animes indicados.")
-
-        # Envío a Telegram
-        enviar_mensaje_telegram(mensaje_telegram)
-
-        return False
-
-    # (antes no se devolvía el resultado)
-    return proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados)
+    return videos_validos
 
 
 def _registrar_video_valido(sheet_service, video, nombre, episodio, fecha, fuentes_fallidas=None, prefijo_captura="Link_"):
@@ -1575,10 +2215,11 @@ def _registrar_video_valido(sheet_service, video, nombre, episodio, fecha, fuent
         )
         if fuentes_fallidas is not None:
             kwargs["fuentes_fallidas"] = fuentes_fallidas
-        actualizar_estado_google_sheets(**kwargs)
+        actualizar_sheet(**kwargs)
 
 
-def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, resetear_fuentes_previas=False):
+def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, resetear_fuentes_previas=False,
+                                         resumen=None):
     """
     Valida que cada resultado sea el anime/temporada/episodio correcto,
     valida TODOS los servidores de la fuente, y si ninguno sirve pasa a la
@@ -1599,6 +2240,7 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, reset
         return False
 
     videos_finales = []
+    sin_cuota_nube = servidores_sin_cuota_vigentes()   # Mega sin cuota ahora -> se prefiere otro servidor
 
     try:
         # ----------------------------------------------------------------------
@@ -1640,7 +2282,8 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, reset
 
             # --- CASO A: la fuente principal es correcta y tiene algún servidor válido ---
             valido, motivo = evaluar_video_de_fuente(
-                driver, video, nombre_servidor, episodio_limpio)
+                driver, video, nombre_servidor, episodio_limpio,
+                servidores_penalizados=sin_cuota_nube)
 
             if valido:
                 logging.info(
@@ -1649,9 +2292,16 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, reset
 
                 _registrar_video_valido(
                     sheet_service, video, nombre_servidor, episodio_limpio,
-                    fecha_ahora, prefijo_captura="Link_"
+                    fecha_ahora,
+                    fuentes_fallidas=video.get("fuentes_fallidas"),
+                    prefijo_captura="Link_"
                 )
 
+                _anotar(resumen, "nuevos", nombre_servidor, episodio_limpio,
+                        servidor=nombre_servidor_legible(
+                            video.get("servidor_seleccionado"), video.get("link_descarga")),
+                        fuente=video.get("fuente"),
+                        descartadas=video.get("fuentes_fallidas", ""))
                 videos_finales.append(video)
                 continue
 
@@ -1661,17 +2311,24 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, reset
 
             if resetear_fuentes_previas:
                 lista_excluidas = []
+                borrar_fuentes_fallidas(nombre_servidor, episodio_limpio)
             else:
-                fallidas_previas_str = video.get("fuentes_fallidas", "")
-                lista_excluidas = [
-                    f.strip() for f in fallidas_previas_str.split(",") if f.strip()]
+                # Lo que traiga el video (leído de Sheets) + lo guardado en disco
+                lista_excluidas = _unir_fuentes(
+                    video.get("fuentes_fallidas", ""),
+                    cargar_fuentes_fallidas(nombre_servidor, episodio_limpio),
+                )
 
             fuente_actual = video.get("fuente", "Desconocida")
-            if fuente_actual and fuente_actual not in lista_excluidas:
-                lista_excluidas.append(fuente_actual)
+            lista_excluidas = _unir_fuentes(lista_excluidas, [fuente_actual])
+            guardar_fuentes_fallidas(nombre_servidor, episodio_limpio, lista_excluidas)
+
+            bitacora = [(fuente_actual, f"descartada: {motivo}")]
 
             v_alt = buscar_fuente_alternativa(
-                driver, nombre_servidor, episodio_limpio, lista_excluidas, download_dir
+                driver, nombre_servidor, episodio_limpio, lista_excluidas,
+                download_dir, bitacora=bitacora,
+                servidores_penalizados=sin_cuota_nube
             )
 
             if v_alt:
@@ -1685,6 +2342,11 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, reset
                     prefijo_captura="Link Alterno "
                 )
 
+                _anotar(resumen, "nuevos", nombre_servidor, episodio_limpio,
+                        servidor=nombre_servidor_legible(
+                            v_alt.get("servidor_seleccionado"), v_alt.get("link_descarga")),
+                        fuente=v_alt.get("fuente"),
+                        descartadas=v_alt.get("fuentes_fallidas", ""))
                 videos_finales.append(v_alt)
                 continue
 
@@ -1699,6 +2361,7 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, reset
             msg_error = (
                 f"🚨 <b>Alerta:</b> Se agotaron todas las fuentes para: <b>{nombre_esc} Episodio {episodio_esc}</b>\n"
                 f"📝 Fuentes probadas: {fuentes_esc}\n"
+                f"{resumen_fuentes_html(bitacora)}"
                 "⏱️ Marcado como 'Sin Fuentes'. Se reintentará en el próximo ciclo."
             )
             logging.error(msg_error)
@@ -1708,7 +2371,7 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, reset
             video["fuentes_fallidas"] = cadena_final_fallidas
 
             if sheet_service:
-                actualizar_estado_google_sheets(
+                actualizar_sheet(
                     sheet_service=sheet_service,
                     nombre_hoja="Animes",
                     nombre_anime=nombre_servidor,
@@ -1719,6 +2382,8 @@ def proceso_nube_buscar_y_guardar_sheets(download_dir, videos_encontrados, reset
                     crear_si_no_existe=True
                 )
 
+            _anotar(resumen, "sin_fuentes", nombre_servidor, episodio_limpio,
+                    fuentes=cadena_final_fallidas)
             videos_finales.append(video)
 
         # --- FUERA DEL BUCLE: Consolidación y Notificación Única ---
@@ -1792,15 +2457,31 @@ def _notificar_cambio(nombre, episodio, motivo, servidor_anterior, fuente_anteri
     )
 
 
-def _siguiente_servidor_misma_fuente(driver, video, nombre, episodio, enlaces_fallidos, servidores_bloqueados):
+def _siguiente_servidor_misma_fuente(driver, video, nombre, episodio, enlaces_fallidos, servidores_bloqueados,
+                                     download_dir=None):
     """
-    Busca, entre los servidores ya validados de la MISMA fuente, uno que no
-    haya fallado todavía (lo vuelve a validar porque pudo caerse mientras tanto).
-    """
-    fuente = video.get("fuente", "Desconocida")
-    bloqueados = {b.lower() for b in servidores_bloqueados}
+    Busca, entre los servidores de la MISMA fuente, uno que no haya fallado
+    todavía (lo vuelve a validar porque pudo caerse mientras tanto).
 
-    for s in cargar_servidores_alternos(nombre, episodio, fuente):
+    Los servidores salen de la caché de la fase nube; si ya no queda ninguno
+    sin probar (o no hay caché), se vuelve a consultar esa fuente una vez.
+    """
+    fuente = video.get("fuente") or "Desconocida"
+    bloqueados = {b.lower() for b in servidores_bloqueados}
+    conocidos = set(enlaces_fallidos) | {video.get("link_descarga")}
+
+    candidatos = cargar_servidores_alternos(nombre, episodio, fuente, conocidos)
+    sin_probar = [c for c in candidatos
+                  if c.get("enlace") and c["enlace"] not in enlaces_fallidos]
+
+    if (not sin_probar and download_dir and fuente != "Desconocida"
+            and not video.get("_servidores_refrescados")):
+        video["_servidores_refrescados"] = True
+        logging.info(
+            f"🔄 Sin servidores alternos guardados para '{fuente}': consultando de nuevo esa fuente...")
+        candidatos = refrescar_servidores_de_fuente(nombre, episodio, fuente, download_dir)
+
+    for s in candidatos:
         enlace = s.get("enlace")
         if not enlace or enlace in enlaces_fallidos:
             continue
@@ -1825,7 +2506,8 @@ def _siguiente_servidor_misma_fuente(driver, video, nombre, episodio, enlaces_fa
 
 def procesar_descarga_video(video, driver_servidor, sheet_service, download_dir, servidores_sin_cuota):
     """
-    Descarga un episodio. Si el servidor falla por archivo caído o cuota:
+    Descarga un episodio. Si el servidor falla (archivo caído, cuota agotada o
+    descarga fallida tras los 3 intentos):
         1) prueba los otros servidores ya validados de la misma fuente,
         2) si no hay, busca otra fuente (validando todos sus servidores),
         3) REINTENTA la descarga con el nuevo enlace y repite si vuelve a fallar
@@ -1841,21 +2523,32 @@ def procesar_descarga_video(video, driver_servidor, sheet_service, download_dir,
 
     carpeta_dia = obtener_directorio_fecha(download_dir)
 
-    lista_excluidas = [
-        f.strip() for f in str(video.get("fuentes_fallidas", "")).split(",") if f.strip()
-    ]
+    # Fuentes ya fallidas: lo que trae la fila de Sheets + lo guardado en disco
+    lista_excluidas = _unir_fuentes(
+        video.get("fuentes_fallidas", ""),
+        cargar_fuentes_fallidas(nombre, episodio_limpio),
+    )
     enlaces_fallidos = set()
     cambios = 0
 
     while True:
         fecha_ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # La fase local lee el enlace desde Sheets (sin nombre de servidor):
+        # se recupera de la caché de la fase nube para dar la pista (p. ej. VOE)
+        if not video.get("servidor_seleccionado"):
+            video["servidor_seleccionado"] = _servidor_desde_cache(
+                nombre, episodio_limpio, video.get("fuente"), video.get("link_descarga")
+            )
+
         servidor_actual = nombre_servidor_desde_url(video.get("link_descarga"))
 
         # Si Mega ya se quedó sin cuota en esta ejecución, ni lo intentamos
+        omitido_por_cuota = False
         if servidor_actual in servidores_sin_cuota:
             logging.warning(
-                f"⏭️ '{servidor_actual}' sin cuota en esta ejecución. Se omite la descarga directa.")
+                f"⏭️ '{servidor_actual}' sin cuota. Se omite la descarga directa.")
             resultado = "cuota_agotada"
+            omitido_por_cuota = True
         else:
             resultado = descargar_video_con_reintentos(
                 video, carpeta_dia, max_intentos=3)
@@ -1882,48 +2575,37 @@ def procesar_descarga_video(video, driver_servidor, sheet_service, download_dir,
             )
 
             if nombre and episodio:
-                actualizar_estado_google_sheets(
+                actualizar_sheet(
                     sheet_service=sheet_service,
                     nombre_hoja="Animes",
                     nombre_anime=nombre,
                     episodio=episodio,
-                    nuevo_estado="Completado"
+                    nuevo_estado="Completado",
+                    fuentes_fallidas=", ".join(lista_excluidas) if lista_excluidas else None
                 )
 
                 marcar_anime_descargado_con_selenium(
                     driver_servidor, nombre, episodio)
 
+            borrar_fuentes_fallidas(nombre, episodio_limpio)
             return True
 
         # ---------------------------------------------------------------------
-        # OPCIÓN C: Retornó False (fallaron los 3 intentos sin ser caído/cuota)
+        # OPCIÓN B: Falla del servidor actual (archivo caído, cuota agotada o
+        # descarga fallida tras los 3 intentos: timeout, botón no encontrado...)
+        # -> siguiente servidor de la MISMA fuente -> si no hay, otra fuente.
         # ---------------------------------------------------------------------
-        if resultado not in ["archivo_caido", "cuota_agotada"]:
-            logging.error(
-                f"❌ Fallaron los 3 intentos de descarga para: {nombre}")
-
-            enviar_mensaje_telegram(
-                f"⚠️ <b>Fallo de Descarga</b>\n\n🎬 Anime: <b>{nombre_esc}</b>\n📺 Episodio: <b>{episodio_esc}</b>\n🔴 Motivo: Agotados 3 reintentos (timeout o botón no interactuable)."
-            )
-
-            actualizar_estado_google_sheets(
-                sheet_service=sheet_service,
-                nombre_hoja="Animes",
-                nombre_anime=nombre,
-                episodio=episodio,
-                nuevo_estado="Cambiar Fuente"
-            )
-            return False
-
-        # ---------------------------------------------------------------------
-        # OPCIÓN B: Fallo crítico (archivo caído o cuota agotada)
-        # ---------------------------------------------------------------------
-        estado_error = "Archivo Caído" if resultado == "archivo_caido" else "Cuota Agotada"
+        if resultado == "archivo_caido":
+            estado_error = "Archivo Caído"
+        elif resultado == "cuota_agotada":
+            estado_error = "Cuota Agotada"
+        else:
+            estado_error = "Descarga Fallida (3 intentos)"
 
         enlace_fallido = video.get("link_descarga")
         servidor_fallido = nombre_servidor_legible(
             video.get("servidor_seleccionado"), enlace_fallido)
-        fuente_anterior = video.get("fuente", "Desconocida")
+        fuente_anterior = video.get("fuente") or "Desconocida"
 
         enlaces_fallidos.add(enlace_fallido)
 
@@ -1931,6 +2613,8 @@ def procesar_descarga_video(video, driver_servidor, sheet_service, download_dir,
             clave = nombre_servidor_desde_url(enlace_fallido)
             if clave != "desconocido":
                 servidores_sin_cuota.add(clave)
+                if not omitido_por_cuota:      # solo si la cuota se detectó AHORA, no al saltarla
+                    marcar_servidor_sin_cuota(clave)
 
         cambios += 1
         logging.error(
@@ -1940,7 +2624,7 @@ def procesar_descarga_video(video, driver_servidor, sheet_service, download_dir,
 
         if cambios > MAX_CAMBIOS_FUENTE:
             logging.error("❌ Se alcanzó el máximo de cambios de fuente.")
-            actualizar_estado_google_sheets(
+            actualizar_sheet(
                 sheet_service=sheet_service,
                 nombre_hoja="Animes",
                 nombre_anime=nombre,
@@ -1955,22 +2639,33 @@ def procesar_descarga_video(video, driver_servidor, sheet_service, download_dir,
             return False
 
         # ---- 1) Otro servidor de la MISMA fuente ----
+        temporal = (resultado == "cuota_agotada")
+
+        # Se prefiere uno sin problemas de cuota...
         s_alterno = _siguiente_servidor_misma_fuente(
             driver_servidor, video, nombre, episodio_limpio,
-            enlaces_fallidos, servidores_sin_cuota
+            enlaces_fallidos, servidores_sin_cuota, download_dir
         )
+        # ...pero si el archivo está caído / la descarga falló, un Mega sin cuota
+        # (temporal) sigue siendo mejor que nada.
+        if not s_alterno and not temporal:
+            s_alterno = _siguiente_servidor_misma_fuente(
+                driver_servidor, video, nombre, episodio_limpio,
+                enlaces_fallidos, set(), download_dir
+            )
 
         if s_alterno:
             video["link_descarga"] = s_alterno["enlace"]
             video["servidor_seleccionado"] = s_alterno["servidor"]
 
-            actualizar_estado_google_sheets(
+            actualizar_sheet(
                 sheet_service=sheet_service,
                 nombre_hoja="Animes",
                 nombre_anime=nombre,
                 episodio=episodio_limpio,
                 nuevo_enlace=s_alterno["enlace"],
                 nueva_fuente=fuente_anterior,
+                fuentes_fallidas=", ".join(lista_excluidas),
                 fecha_actualizacion=fecha_ahora,
                 nuevo_estado="Pendiente"
             )
@@ -1984,25 +2679,57 @@ def procesar_descarga_video(video, driver_servidor, sheet_service, download_dir,
             continue  # Reintenta la descarga con el otro servidor
 
         # ---- 2) Otra fuente (con todos sus servidores validados) ----
-        if fuente_anterior and fuente_anterior.lower() not in [f.lower() for f in lista_excluidas]:
-            lista_excluidas.append(fuente_anterior)
+        # Una cuota agotada es TEMPORAL: la fuente actual NO se marca como fallida
+        temporal = (resultado == "cuota_agotada")
+
+        lista_busqueda = _unir_fuentes(lista_excluidas, [fuente_anterior])
+        if not temporal:
+            lista_excluidas = lista_busqueda
+            guardar_fuentes_fallidas(nombre, episodio_limpio, lista_excluidas)
+        bitacora = [(fuente_anterior, f"falló: {estado_error}")]
 
         logging.info(
-            f"🚫 Fuentes descartadas acumuladas: {', '.join(lista_excluidas)}")
+            f"🚫 Fuentes descartadas acumuladas: {', '.join(lista_busqueda)}")
 
         v_nuevo = buscar_fuente_alternativa(
-            driver_servidor, nombre, episodio_limpio, lista_excluidas,
-            download_dir, servidores_sin_cuota
+            driver_servidor, nombre, episodio_limpio, lista_busqueda,
+            download_dir,
+            # cuota agotada: buscar algo que NO sea ese servidor; si no, solo se penaliza
+            servidores_bloqueados=servidores_sin_cuota if temporal else None,
+            servidores_penalizados=servidores_sin_cuota,
+            bitacora=bitacora, persistir=not temporal
         )
 
         cadena_fallidas = ", ".join(lista_excluidas)
+
+        if v_nuevo is None and temporal:
+            # Sin alternativas: se queda Pendiente hasta que el servidor recupere la cuota
+            logging.warning(
+                f"⏳ {servidor_fallido} sin cuota y sin alternativas: se deja Pendiente.")
+            actualizar_sheet(
+                sheet_service=sheet_service,
+                nombre_hoja="Animes",
+                nombre_anime=nombre,
+                episodio=episodio_limpio,
+                fuentes_fallidas=cadena_fallidas or None,
+                fecha_actualizacion=fecha_ahora,
+                nuevo_estado="Pendiente"
+            )
+            enviar_mensaje_telegram(
+                f"⏳ <b>Cuota agotada en {html.escape(servidor_fallido)}</b>\n\n"
+                f"🎬 Anime: <b>{nombre_esc}</b>\n"
+                f"📺 Episodio: <b>{episodio_esc}</b>\n"
+                f"{resumen_fuentes_html(bitacora)}"
+                f"🕒 Sin otro servidor disponible: queda Pendiente y se reintentará cuando haya cuota."
+            )
+            return False
 
         if v_nuevo is None:
             logging.error(
                 "❌ No se encontraron fuentes alternativas válidas. Guardando 'Sin Fuentes'.")
             video["fuentes_fallidas"] = cadena_fallidas
 
-            actualizar_estado_google_sheets(
+            actualizar_sheet(
                 sheet_service=sheet_service,
                 nombre_hoja="Animes",
                 nombre_anime=nombre,
@@ -2017,7 +2744,8 @@ def procesar_descarga_video(video, driver_servidor, sheet_service, download_dir,
                 f"🎬 Anime: <b>{nombre_esc}</b>\n"
                 f"📺 Episodio: <b>{episodio_esc}</b>\n"
                 f"🔴 Último fallo: <b>{html.escape(servidor_fallido)}</b> ({html.escape(estado_error)})\n"
-                f"📝 Fuentes probadas: {html.escape(cadena_fallidas)}\n"
+                f"📝 Fuentes fallidas: {html.escape(cadena_fallidas)}\n"
+                f"{resumen_fuentes_html(bitacora)}"
                 f"🔴 Estado: <b>Sin Fuentes Disponibles</b>"
             )
             return False
@@ -2041,7 +2769,7 @@ def procesar_descarga_video(video, driver_servidor, sheet_service, download_dir,
             f"✅ Nueva fuente '{nueva_fuente}' ({nuevo_servidor}). Sincronizando Sheets...")
 
         # B) Sincronizar en Google Sheets
-        actualizar_estado_google_sheets(
+        actualizar_sheet(
             sheet_service=sheet_service,
             nombre_hoja="Animes",
             nombre_anime=nombre,
@@ -2119,7 +2847,9 @@ def proceso_local_descargar_archivos(download_dir):
         return
 
     # Servidores (p. ej. 'mega') que se quedaron sin cuota durante ESTA ejecución
-    servidores_sin_cuota = set()
+    servidores_sin_cuota = servidores_sin_cuota_vigentes()
+    if servidores_sin_cuota:
+        logging.info(f"⏳ Servidores sin cuota (vigente): {', '.join(sorted(servidores_sin_cuota))}")
 
     try:
         for video in videos_finales:
