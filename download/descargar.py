@@ -49,118 +49,212 @@ NOMBRES_SERVIDOR_LEGIBLES = {
 }
 
 
+# ==========================================
+# VERIFICACIÓN DE DESCARGAS (antes / durante / después)
+# ==========================================
+
+EXTENSIONES_VIDEO = (".mp4", ".mkv", ".avi", ".mov", ".wmv")
+EXTENSIONES_TEMPORALES = (".crdownload", ".part", ".tmp")
+
+# Un video más pequeño que esto se considera basura (página de error, etc.)
+TAMANO_MINIMO_VIDEO = 1 * 1024 * 1024  # 1 MB
+
+# Un temporal que no cambia de tamaño durante este tiempo se considera
+# abandonado (huérfano) y deja de bloquear la confirmación.
+SEGUNDOS_TEMPORAL_ABANDONADO = 45
+
+# Si el video ya está completo y estable, máximo que se espera a que otro
+# temporal "activo" desaparezca antes de dar la descarga por buena.
+SEGUNDOS_ESPERA_EXTRA_TRAS_VIDEO = 120
+
+# Antes de empezar, los temporales con más de esto sin tocarse se borran.
+SEGUNDOS_TEMPORAL_PREVIO_OBSOLETO = 300
+
+
+def _es_temporal(nombre):
+    return nombre.lower().endswith(EXTENSIONES_TEMPORALES)
+
+
+def _es_video(nombre):
+    return nombre.lower().endswith(EXTENSIONES_VIDEO)
+
+
+def tomar_instantanea_carpeta(download_dir):
+    """
+    Devuelve {nombre: (tamaño, mtime)} de los archivos de la carpeta,
+    o None si no se pudo leer.
+    """
+    datos = {}
+    try:
+        with os.scandir(download_dir) as it:
+            for entrada in it:
+                try:
+                    if not entrada.is_file():
+                        continue
+                    st = entrada.stat()
+                except OSError:
+                    continue  # el archivo desapareció/renombró mientras leíamos
+                datos[entrada.name] = (st.st_size, st.st_mtime)
+    except OSError as e:
+        logging.error(f"❌ No se pudo leer la carpeta de descargas: {e}")
+        return None
+    return datos
+
+
+def registrar_estado_carpeta(download_dir, etapa):
+    """Deja en el log qué hay en la carpeta (videos y temporales)."""
+    datos = tomar_instantanea_carpeta(download_dir)
+    if datos is None:
+        return
+    videos = [n for n in datos if _es_video(n)]
+    temporales = [n for n in datos if _es_temporal(n)]
+    logging.info(
+        f"🗂️ [{etapa}] Carpeta: {len(videos)} video(s), "
+        f"{len(temporales)} temporal(es)"
+    )
+    for t in temporales:
+        logging.info(
+            f"   • temporal: {t} ({datos[t][0] / (1024 * 1024):.2f} MB)")
+
+
+def _temporal_pertenece_a_video(temporal, nombres_videos):
+    """
+    'Capitulo.mp4.crdownload' pertenece al video 'Capitulo.mp4': si ese
+    video ya existe, el temporal es un sobrante y no una descarga en curso.
+    """
+    base = temporal
+    for ext in EXTENSIONES_TEMPORALES:
+        if temporal.lower().endswith(ext):
+            base = temporal[: -len(ext)]
+            break
+    return base.lower() in {v.lower() for v in nombres_videos}
+
+
+def _borrar_archivos(download_dir, nombres, motivo):
+    borrados = 0
+    for nombre in nombres:
+        ruta = os.path.join(download_dir, nombre)
+        try:
+            os.remove(ruta)
+            borrados += 1
+            logging.info(f"🧹 Temporal eliminado ({motivo}): {nombre}")
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            # En Windows puede estar bloqueado si Chrome aún lo tiene abierto
+            logging.warning(f"⚠️ No se pudo eliminar {nombre}: {e}")
+    return borrados
+
+
+def limpiar_temporales_previos(download_dir):
+    """
+    ANTES de descargar: borra temporales viejos que quedaron de ejecuciones
+    anteriores, para que no contaminen la verificación.
+    """
+    datos = tomar_instantanea_carpeta(download_dir)
+    if not datos:
+        return
+    ahora = time.time()
+    viejos = [
+        n for n, (_, mtime) in datos.items()
+        if _es_temporal(n) and ahora - mtime >= SEGUNDOS_TEMPORAL_PREVIO_OBSOLETO
+    ]
+    if viejos:
+        _borrar_archivos(download_dir, viejos, "obsoleto previo")
+
+
 def verificar_descarga(
     download_dir,
     archivos_antes,
     tiempo_maximo=1800,
     intervalo=2,
-    tiempo_estable=6
+    tiempo_estable=6,
+    tamano_minimo=TAMANO_MINIMO_VIDEO,
 ):
     """
-    Espera hasta que aparezca una descarga terminada.
+    Espera hasta que aparezca un video NUEVO y completo.
 
-    - Detecta archivos temporales de Chrome (.crdownload)
-    - Espera hasta que desaparezcan
-    - Comprueba que exista un archivo final
-    - Comprueba que su tamaño deje de cambiar
-    - Devuelve la ruta del archivo terminado
+    ``archivos_antes`` es lo que había en la carpeta antes de descargar
+    (set de nombres o el dict de tomar_instantanea_carpeta).
+
+    Reglas:
+    - Un video nuevo cuyo tamaño ya no cambia = descarga completa.
+    - Un temporal (.crdownload/.part/.tmp) solo bloquea mientras esté
+      ACTIVO (su tamaño sigue cambiando) y no pertenezca a un video ya
+      terminado. Si está abandonado o es sobrante de un video completo,
+      se ignora y se borra al confirmar.
+    - Si al agotar el tiempo hay un video estable, se devuelve igualmente.
+    Devuelve la ruta del video o None.
     """
-
+    nombres_antes = set(archivos_antes)
     inicio = time.time()
+
+    # nombre_temporal -> (ultimo_tamano, instante_del_ultimo_cambio)
+    seguimiento_temporales = {}
+
     archivo_anterior = None
     tamano_anterior = -1
     segundos_estable = 0
 
-    extensiones_video = (
-        ".mp4",
-        ".mkv",
-        ".avi",
-        ".mov",
-        ".wmv"
-    )
-
-    extensiones_temporales = (
-        ".crdownload",
-        ".part",
-        ".tmp"
-    )
+    mejor_candidato = None          # video estable ya visto
+    momento_candidato_estable = None
 
     logging.info("Esperando a que termine la descarga...")
 
     while time.time() - inicio < tiempo_maximo:
-
-        try:
-            archivos_actuales = set(os.listdir(download_dir))
-        except OSError as e:
-            logging.error(f"❌ No se pudo leer la carpeta de descargas: {e}")
+        ahora = time.time()
+        datos = tomar_instantanea_carpeta(download_dir)
+        if datos is None:
             time.sleep(intervalo)
             continue
 
-        temporales = [
-            archivo
-            for archivo in archivos_actuales
-            if archivo.lower().endswith(
-                extensiones_temporales
-            )
-        ]
+        # ---------- Temporales: ¿cuáles siguen vivos? ----------
+        temporales = [n for n in datos if _es_temporal(n)]
+        for n in list(seguimiento_temporales):
+            if n not in datos:
+                del seguimiento_temporales[n]  # Chrome lo renombró a video
 
-        if temporales:
-            logging.info(
-                f"⬇️ Descarga en progreso... "
-                f"({len(temporales)} archivo(s) temporal(es))"
-            )
+        for t in temporales:
+            tam, mtime = datos[t]
+            previo = seguimiento_temporales.get(t)
+            if previo is None:
+                # Primera vez que lo vemos: usamos su mtime real, así un
+                # temporal viejo se detecta como abandonado de inmediato.
+                seguimiento_temporales[t] = (tam, mtime)
+            elif previo[0] != tam:
+                seguimiento_temporales[t] = (tam, ahora)
 
-            segundos_estable = 0
-            time.sleep(intervalo)
-            continue
-
-        # --------------------------------------------------
-        # 2. Buscar archivos de video NUEVOS
-        # --------------------------------------------------
-
-        archivos_nuevos = (
-            archivos_actuales - archivos_antes
-        )
-
+        # ---------- Videos nuevos y válidos ----------
         videos_nuevos = [
-            archivo
-            for archivo in archivos_nuevos
-            if archivo.lower().endswith(extensiones_video)
+            n for n, (tam, _) in datos.items()
+            if _es_video(n) and n not in nombres_antes and tam >= tamano_minimo
         ]
 
+        activos = []
+        abandonados = []
+        sobrantes = []  # temporales de un video que ya está completo
+        for t in temporales:
+            if _temporal_pertenece_a_video(t, videos_nuevos):
+                sobrantes.append(t)
+            elif ahora - seguimiento_temporales[t][1] >= SEGUNDOS_TEMPORAL_ABANDONADO:
+                abandonados.append(t)
+            else:
+                activos.append(t)
+
+        # ---------- Estabilidad del video más reciente ----------
         if videos_nuevos:
-
-            # El más recientemente modificado
-            archivo = max(
-                videos_nuevos,
-                key=lambda x: os.path.getmtime(
-                    os.path.join(download_dir, x)
-                )
-            )
-
+            archivo = max(videos_nuevos, key=lambda x: datos[x][1])
             ruta = os.path.join(download_dir, archivo)
-
-            try:
-                tamano_actual = os.path.getsize(ruta)
-            except OSError:
-                time.sleep(intervalo)
-                continue
-
-            # --------------------------------------------------
-            # 3. Comprobar que el archivo deje de crecer
-            # --------------------------------------------------
+            tamano_actual = datos[archivo][0]
 
             if archivo == archivo_anterior:
-
                 if tamano_actual == tamano_anterior:
                     segundos_estable += intervalo
                 else:
                     segundos_estable = 0
-
             else:
                 archivo_anterior = archivo
                 segundos_estable = 0
-
             tamano_anterior = tamano_actual
 
             logging.info(
@@ -169,33 +263,63 @@ def verificar_descarga(
                 f"estable: {segundos_estable}s"
             )
 
-            # --------------------------------------------------
-            # 4. Confirmación real
-            # --------------------------------------------------
+            if segundos_estable >= tiempo_estable:
+                if mejor_candidato != ruta:
+                    mejor_candidato = ruta
+                    momento_candidato_estable = ahora
 
-            if (
-                tamano_actual > 0
-                and segundos_estable >= tiempo_estable
-            ):
+                espera_extra = ahora - momento_candidato_estable
+                if not activos or espera_extra >= SEGUNDOS_ESPERA_EXTRA_TRAS_VIDEO:
+                    if activos:
+                        logging.warning(
+                            f"⚠️ Se confirma {archivo} aunque hay temporal(es) "
+                            f"activo(s): {', '.join(activos)}"
+                        )
+                    logging.info(f"✅ Descarga confirmada: {archivo}")
+
+                    # DESPUÉS: limpiar sobrantes y dejar registro
+                    _borrar_archivos(
+                        download_dir, sobrantes + abandonados,
+                        "sobrante tras descarga completa"
+                    )
+                    registrar_estado_carpeta(download_dir, "después")
+                    return ruta
+
                 logging.info(
-                    f"✅ Descarga confirmada: {archivo}"
+                    f"⏳ Video completo; esperando que termine otro temporal "
+                    f"activo: {', '.join(activos)}"
                 )
-
-                return ruta
+        else:
+            # Aún no hay video: solo informamos del progreso
+            archivo_anterior = None
+            segundos_estable = 0
+            if activos:
+                logging.info(
+                    f"⬇️ Descarga en progreso... "
+                    f"({len(activos)} archivo(s) temporal(es))"
+                )
+            elif abandonados:
+                logging.info(
+                    f"⚠️ Ignorando temporal(es) abandonado(s): "
+                    f"{', '.join(abandonados)}"
+                )
 
         time.sleep(intervalo)
 
-    # ------------------------------------------------------
-    # 5. Timeout
-    # ------------------------------------------------------
-
-    minutos = tiempo_maximo // 60
+    # ---------- Timeout ----------
+    if mejor_candidato and os.path.exists(mejor_candidato):
+        logging.warning(
+            f"⚠️ Timeout, pero hay un video completo y estable: "
+            f"{os.path.basename(mejor_candidato)}. Se da por válido."
+        )
+        registrar_estado_carpeta(download_dir, "después (timeout)")
+        return mejor_candidato
 
     logging.error(
         f"❌ Timeout: la descarga no terminó "
-        f"después de {minutos} minutos."
+        f"después de {tiempo_maximo // 60} minutos."
     )
-
+    registrar_estado_carpeta(download_dir, "timeout")
     return None
 
 
@@ -701,7 +825,11 @@ def hacer_click_en_boton_descarga(
         # --------------------------------------------------
         # 1. Registrar archivos existentes ANTES
         # --------------------------------------------------
-        archivos_antes = set(os.listdir(download_dir))
+        limpiar_temporales_previos(download_dir)
+        registrar_estado_carpeta(download_dir, "antes")
+        archivos_antes = tomar_instantanea_carpeta(download_dir)
+        if archivos_antes is None:
+            archivos_antes = {}
 
         # --------------------------------------------------
         # 2. Abrir el enlace y detectar el servidor
