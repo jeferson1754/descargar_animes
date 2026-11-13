@@ -38,6 +38,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
+from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -49,7 +51,12 @@ load_dotenv()
 VIDEO_EXTS = {".mkv", ".mp4", ".avi", ".webm", ".mov", ".m4v"}
 
 # --- Rutas por defecto: se usan si ejecutas sin argumentos (botón "Run" de VS Code) ---
-DEFAULT_INPUT = r"D:\Xampp\htdocs\descargar_animes\Descargas"
+DEFAULT_INPUT = os.environ.get("CARPETA_DESCARGAS")
+
+if not DEFAULT_INPUT:
+    raise ValueError("❌ Error: La variable de entorno 'CARPETA_DESCARGAS' no está configurada.")
+else:
+    DEFAULT_INPUT = Path(DEFAULT_INPUT)
 # <carpeta del episodio>/procesados  (acelerados)
 PROCESSED_DIRNAME = "procesados"
 # <carpeta del episodio>/originales  (originales)
@@ -155,10 +162,36 @@ def load_gemini_key() -> str | None:
     return None
 
 
-def gemini_marks(src: Path, duration: float, threads: int, model: str) -> dict:
+def _motivo_corto(error: Exception) -> str:
+    """Resume un error de Gemini para dejarlo en la hoja."""
+    texto = str(error)
+    if "429" in texto or "ResourceExhausted" in texto or "quota" in texto.lower():
+        return "cuota agotada"
+    if "503" in texto or "UNAVAILABLE" in texto:
+        return "modelo no disponible (503)"
+    if "404" in texto or "NOT_FOUND" in texto:
+        return "modelo no encontrado (404)"
+    if "timeout" in texto.lower() or "timed out" in texto.lower():
+        return "tiempo de espera agotado"
+    return texto.replace("\n", " ")[:80]
+
+
+def gemini_marks(src: Path, duration: float, threads: int, model: str,
+                 meta: dict | None = None) -> dict:
+    """
+    Devuelve {"op": [...]|None, "ed": [...]|None}.
+    Si se pasa `meta`, se llena con:
+        meta["modelo"]   -> modelo que respondió (o "" si ninguno)
+        meta["fallos"]   -> ["gemini-x (cuota agotada)", ...] modelos que fallaron antes
+        meta["detalle"]  -> texto explicativo si no hubo respuesta
+    """
+    if meta is None:
+        meta = {}
+    meta.update({"modelo": "", "fallos": [], "detalle": ""})
     marks = {"op": None, "ed": None}
     api_key = load_gemini_key()
     if not api_key:
+        meta["detalle"] = "falta la clave de Gemini"
         log.warning("Plan B no disponible: falta la clave (GEMINI_API_KEY o %s).",
                     SCRIPT_DIR / "gemini_key.txt")
         return marks
@@ -168,6 +201,7 @@ def gemini_marks(src: Path, duration: float, threads: int, model: str) -> dict:
         from google.genai import types
     except ImportError:
         log.error("Falta la librería de Gemini. Ejecuta: pip install google-genai")
+        meta["detalle"] = "falta la librería google-genai"
         return marks
 
     # Con límite de espera: sin esto, una petición lenta parece "colgada"
@@ -192,6 +226,7 @@ def gemini_marks(src: Path, duration: float, threads: int, model: str) -> dict:
                     f"Archivo en Gemini en estado {uploaded.state.name}")
 
             data = None
+            ultimo_motivo = "sin respuesta"
             # Iteramos sobre los modelos disponibles para el fallback
             for modelo_actual in modelos_a_probar:
                 log.info("🤖 Intentando análisis con el modelo: %s", modelo_actual)
@@ -206,9 +241,11 @@ def gemini_marks(src: Path, duration: float, threads: int, model: str) -> dict:
                                 response_mime_type="application/json"),
                         )
                         data = json.loads(resp.text)
+                        meta["modelo"] = modelo_actual
                         break  # Éxito, salimos del bucle de reintentos
                     except Exception as e:
                         error_str = str(e)
+                        ultimo_motivo = _motivo_corto(e)
                         log.warning("⚠️ %s - Intento %d/3 falló: %s",
                                     modelo_actual, attempt, e)
 
@@ -222,10 +259,13 @@ def gemini_marks(src: Path, duration: float, threads: int, model: str) -> dict:
 
                 if data:
                     break  # Si obtuvimos datos con éxito, no probamos más modelos
+                meta["fallos"].append(f"{modelo_actual} ({ultimo_motivo})")
 
             if not data:
                 log.error(
                     "❌ Todos los modelos de Gemini fallaron o agotaron su cuota.")
+                meta["detalle"] = "todos los modelos fallaron: " + \
+                    "; ".join(meta["fallos"])
                 return marks
 
         finally:
@@ -241,6 +281,102 @@ def gemini_marks(src: Path, duration: float, threads: int, model: str) -> dict:
     if data.get("ed_start") is not None and data.get("ed_end") is not None:
         marks["ed"] = [float(data["ed_start"]), float(data["ed_end"])]
     return marks
+
+
+# --------------------------------------------------------------------------- #
+# Registro de Gemini en Google Sheets (columnas J:L de la hoja "Animes")
+# --------------------------------------------------------------------------- #
+INDICE_DESCARGAS = "descargas_index.json"   # lo escribe descargar.py en la carpeta de entrada
+_sheets_estado = {"service": None, "intentado": False, "filas": None}
+
+
+def _importar_base_excel():
+    """
+    Importa base_excel sin romper el logging: ese módulo reconfigura el logger
+    raíz al importarse y descartaría el archivo anime_x3.log.
+    """
+    if "base_excel" in sys.modules:
+        return sys.modules["base_excel"]
+    raiz = logging.getLogger()
+    handlers, nivel = list(raiz.handlers), raiz.level
+    try:
+        import base_excel
+    finally:
+        extra = [h for h in raiz.handlers if h not in handlers]
+        raiz.handlers = handlers + extra
+        raiz.setLevel(nivel)
+    return base_excel
+
+
+def _servicio_sheets():
+    """Conexión a Sheets, creada una sola vez. None si no está disponible."""
+    if not _sheets_estado["intentado"]:
+        _sheets_estado["intentado"] = True
+        try:
+            _sheets_estado["service"] = _importar_base_excel().obtener_conexion_google_sheets()
+        except Exception as e:
+            log.warning("  Sheets no disponible, no se guardará lo de Gemini: %s", e)
+    return _sheets_estado["service"]
+
+
+def _norm(texto: str) -> str:
+    t = unicodedata.normalize("NFKD", str(texto))
+    t = "".join(c for c in t if not unicodedata.combining(c)).lower()
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", t).split())
+
+
+def _ubicar_episodio(src: Path, in_dir: Path) -> tuple[str, str] | None:
+    """
+    Devuelve (nombre_anime, episodio) del archivo.
+    1) Índice que escribe descargar.py al terminar cada descarga (exacto).
+    2) Si no está, se compara el nombre del archivo con las filas de la hoja.
+    """
+    indice = in_dir / INDICE_DESCARGAS
+    if indice.exists():
+        try:
+            datos = json.loads(indice.read_text(encoding="utf-8"))
+            item = datos.get(str(src.resolve()).lower())
+            if item:
+                return str(item["nombre"]), str(item["episodio"])
+        except Exception as e:
+            log.warning("  No se pudo leer %s: %s", INDICE_DESCARGAS, e)
+
+    service = _servicio_sheets()
+    if not service:
+        return None
+    try:
+        filas = _importar_base_excel().leer_animes_pendientes(service)
+    except Exception:
+        return None
+
+    archivo = _norm(src.stem)
+    numeros = {int(n) for n in re.findall(r"\d+", archivo)}
+    mejor, largo = None, 0
+    for f in filas:
+        nombre = _norm(f.get("nombre", ""))
+        ep = str(f.get("episodio", "")).strip()
+        if nombre and nombre in archivo and ep.isdigit() and int(ep) in numeros:
+            if len(nombre) > largo:       # "X II" gana a "X" si el archivo dice "X II"
+                mejor, largo = (f["nombre"], ep), len(nombre)
+    return mejor
+
+
+def registrar_gemini(src: Path, in_dir: Path, modelo: str, detalle: str) -> None:
+    """Guarda modelo, detalle y fecha de procesamiento de Gemini en la hoja."""
+    try:
+        ubicacion = _ubicar_episodio(src, in_dir)
+        if not ubicacion:
+            log.warning("  Sheets: no pude saber a qué anime/episodio corresponde '%s'; "
+                        "no se guardó lo de Gemini.", src.name)
+            return
+        service = _servicio_sheets()
+        if not service:
+            return
+        _importar_base_excel().registrar_gemini_en_sheets(
+            service, ubicacion[0], ubicacion[1], modelo, detalle,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    except Exception as e:
+        log.warning("  No se pudo registrar Gemini en Sheets: %s", e)
 
 
 # --------------------------------------------------------------------------- #
@@ -411,12 +547,32 @@ def get_marks(src: Path, info: dict, args, cache: dict, cache_path: Path) -> tup
 
     if not (marks["op"] or marks["ed"]):
         log.info("  Consultando Gemini para detectar OP/ED...")
+        meta: dict = {}
         try:
-            raw = gemini_marks(src, duration, args.threads, args.gemini_model)
+            raw = gemini_marks(src, duration, args.threads,
+                               args.gemini_model, meta)
         except Exception as e:
             log.error("  Gemini falló: %s", e)
             raw = {"op": None, "ed": None}
+            meta.setdefault("modelo", "")
+            meta["detalle"] = f"error: {str(e)[:150]}"
         marks = validate_marks(raw, duration)
+
+        # ---- Resultado para la hoja ----
+        def _fmt(r):
+            return f"{r[0]:.0f}-{r[1]:.0f}s" if r else "no tiene"
+        modelo_ok = meta.get("modelo", "")
+        if marks["op"] or marks["ed"]:
+            detalle = f"✅ Funcionó | OP: {_fmt(marks['op'])} | ED: {_fmt(marks['ed'])}"
+            if meta.get("fallos"):
+                detalle += " | antes falló: " + "; ".join(meta["fallos"])
+        elif modelo_ok:
+            detalle = "❌ No funcionó: Gemini respondió pero sin marcas válidas de OP/ED"
+        else:
+            detalle = "❌ No funcionó: " + (meta.get("detalle") or "sin respuesta")
+        # Si ningún modelo respondió, se deja constancia del primero que se intentó
+        modelo_hoja = modelo_ok or f"{args.gemini_model} (sin respuesta)"
+        registrar_gemini(src, cache_path.parent, modelo_hoja, detalle)
         if marks["op"] or marks["ed"]:
             # Solo se guarda lo válido: así nunca se reutiliza una respuesta mala
             cache["marks"][gkey] = {

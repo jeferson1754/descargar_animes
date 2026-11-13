@@ -61,7 +61,7 @@ TAMANO_MINIMO_VIDEO = 1 * 1024 * 1024  # 1 MB
 
 # Un temporal que no cambia de tamaño durante este tiempo se considera
 # abandonado (huérfano) y deja de bloquear la confirmación.
-SEGUNDOS_TEMPORAL_ABANDONADO = 45
+SEGUNDOS_TEMPORAL_ABANDONADO = 120
 
 # Si el video ya está completo y estable, máximo que se espera a que otro
 # temporal "activo" desaparezca antes de dar la descarga por buena.
@@ -321,6 +321,37 @@ def verificar_descarga(
     )
     registrar_estado_carpeta(download_dir, "timeout")
     return None
+
+
+# Ruta del último video confirmado por verificar_descarga (la lee procesar_descarga_video)
+ULTIMA_DESCARGA = {"ruta": None}
+
+# Índice archivo -> (anime, episodio). api_anime.py lo usa para saber en qué
+# fila de la hoja debe guardar lo de Gemini.
+INDICE_DESCARGAS = "descargas_index.json"
+
+
+def registrar_archivo_descargado(download_dir, nombre, episodio, ruta):
+    """Anota en <download_dir>/descargas_index.json qué anime/episodio es este archivo."""
+    if not ruta:
+        return
+    try:
+        indice_path = os.path.join(download_dir, INDICE_DESCARGAS)
+        datos = {}
+        if os.path.exists(indice_path):
+            try:
+                with open(indice_path, "r", encoding="utf-8") as f:
+                    datos = json.load(f)
+            except Exception:
+                datos = {}
+        datos[os.path.abspath(ruta).lower()] = {
+            "nombre": str(nombre), "episodio": str(episodio)}
+        tmp = indice_path + ".tmp_idx"       # extensión que verificar_descarga no vigila
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(datos, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, indice_path)
+    except Exception as e:
+        logging.warning(f"⚠️ No se pudo registrar el archivo en el índice: {e}")
 
 
 def marcar_anime_descargado_con_selenium(driver, nombre_anime, episodio):
@@ -1251,6 +1282,7 @@ def hacer_click_en_boton_descarga(
         # 8. Resultado final
         # --------------------------------------------------
         if archivo_descargado:
+            ULTIMA_DESCARGA["ruta"] = archivo_descargado
             logging.info(f"✅ DESCARGA COMPLETADA: {nombre_video}")
             if servidor == "voe":
                 registrar_dominio_voe(url_final)
@@ -2701,6 +2733,10 @@ def procesar_descarga_video(video, driver_servidor, sheet_service, download_dir,
                 f"🖥️ Servidor: <b>{html.escape(servidor_ok)}</b> ({html.escape(str(video.get('fuente')))})\n"
                 f"🟢 Estado: Completado."
             )
+
+            registrar_archivo_descargado(
+                download_dir, nombre, episodio_limpio,
+                ULTIMA_DESCARGA.pop("ruta", None))
 
             if nombre and episodio:
                 actualizar_sheet(

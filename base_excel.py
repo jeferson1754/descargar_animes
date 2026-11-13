@@ -19,6 +19,17 @@ SCOPES = [
 
 SPREADSHEET_ID = "1Z35OcOCf9tTHh9MVWvpAGnJrv8o7JShvwbokpLBFi7Y"
 
+# Columnas de la hoja "Animes" (A..M)
+ENCABEZADOS_ANIMES = [
+    "Anime", "Episodio", "Enlace", "Fuente",
+    "Fuentes Fallidas", "Fecha Detección",
+    "Fecha Actualización", "Fecha Descarga", "Estado",
+    "Modelo Gemini", "Detalle Gemini", "Fecha Procesamiento Gemini",
+    "Evaluación Gemini",   # la escribe el bot de Telegram (Apps Script), no Python
+]
+NUM_COLUMNAS_ANIMES = len(ENCABEZADOS_ANIMES)   # 13
+RANGO_ANIMES = "Animes!A:M"
+
 # Lista global para acumular los logs si deseas volcar logs a Sheets
 logs_acumulados_sheets = []
 
@@ -129,7 +140,7 @@ def leer_animes_pendientes(sheet_service):
         return []
 
     try:
-        rango_lectura = "Animes!A:I"
+        rango_lectura = RANGO_ANIMES
 
         # Solicitamos los datos a Google Sheets
         result = sheet_service.spreadsheets().values().get(
@@ -159,6 +170,10 @@ def leer_animes_pendientes(sheet_service):
                 fecha_actualizacion = fila[6].strip() if len(fila) > 6 else ""
                 fecha_descarga = fila[7].strip() if len(fila) > 7 else ""
                 estado = fila[8].strip() if len(fila) > 8 else "Pendiente"
+                modelo_gemini = fila[9].strip() if len(fila) > 9 else ""
+                detalle_gemini = fila[10].strip() if len(fila) > 10 else ""
+                fecha_gemini = fila[11].strip() if len(fila) > 11 else ""
+                evaluacion_gemini = fila[12].strip() if len(fila) > 12 else ""
 
                 # Filtrar solo si el estado es 'Pendiente' o 'Cambiar Fuente'
 
@@ -171,7 +186,11 @@ def leer_animes_pendientes(sheet_service):
                     "fecha_deteccion": fecha_deteccion,
                     "fecha_actualizacion": fecha_actualizacion,
                     "fecha_descarga": fecha_descarga,
-                    "estado": estado
+                    "estado": estado,
+                    "modelo_gemini": modelo_gemini,
+                    "detalle_gemini": detalle_gemini,
+                    "fecha_gemini": fecha_gemini,
+                    "evaluacion_gemini": evaluacion_gemini
                 })
 
         logging.info(
@@ -194,7 +213,7 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         return False
 
     try:
-        rango_lectura = "Animes!A:I"
+        rango_lectura = RANGO_ANIMES
         result = sheet_service.spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=rango_lectura
@@ -206,9 +225,16 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         if filas_totales_hoja:
             datos_existentes = filas_totales_hoja[1:]
             for fila in datos_existentes:
-                while len(fila) < 9:
+                while len(fila) < NUM_COLUMNAS_ANIMES:
                     fila.append("")
                 filas_antiguas.append(fila)
+
+        # Lo que Gemini ya escribió en una fila no debe perderse cuando esa
+        # misma fila se vuelve a insertar arriba como "nueva".
+        gemini_previo = {
+            (str(f[0]).strip().lower(), str(f[1]).strip()): f[9:13]
+            for f in filas_antiguas
+        }
 
         tiempo_actual = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -228,6 +254,13 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
             f_descarga = anime.get("fecha_descarga", "")
             estado = anime.get("estado", "Pendiente")
 
+            clave_fila = (str(nombre_anime).strip().lower(), str(episodio).strip())
+            previo = gemini_previo.get(clave_fila, ["", "", "", ""])
+            modelo_g = anime.get("modelo_gemini") or previo[0]
+            detalle_g = anime.get("detalle_gemini") or previo[1]
+            fecha_g = anime.get("fecha_gemini") or previo[2]
+            evaluacion_g = anime.get("evaluacion_gemini") or previo[3]
+
             filas_nuevas.append([
                 nombre_anime,
                 str(episodio),
@@ -237,7 +270,11 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
                 f_deteccion,
                 f_actualizacion,
                 f_descarga,
-                estado
+                estado,
+                modelo_g,
+                detalle_g,
+                fecha_g,
+                evaluacion_g
             ])
             # Clave única para identificar duplicados: (nombre_lowercase, episodio_string)
             claves_nuevas.add(
@@ -259,16 +296,12 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
         # Combinar: Lo nuevo arriba, lo antiguo sin duplicados abajo
         nuevos_datos_combinados = filas_nuevas + filas_antiguas_filtradas
 
-        filas_finales = [[
-            "Anime", "Episodio", "Enlace", "Fuente",
-            "Fuentes Fallidas", "Fecha Detección",
-            "Fecha Actualización", "Fecha Descarga", "Estado"
-        ]] + nuevos_datos_combinados
+        filas_finales = [ENCABEZADOS_ANIMES] + nuevos_datos_combinados
 
         # Limpiar y escribir
         sheet_service.spreadsheets().values().clear(
             spreadsheetId=SPREADSHEET_ID,
-            range="Animes!A:I",
+            range=RANGO_ANIMES,
             body={}
         ).execute()
 
@@ -345,7 +378,7 @@ def actualizar_estado_google_sheets(
         return False
 
     try:
-        rango_lectura = f"{nombre_hoja}!A:I"
+        rango_lectura = f"{nombre_hoja}!A:M"
         resultado_lectura = sheet_service.spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=rango_lectura
@@ -388,7 +421,8 @@ def actualizar_estado_google_sheets(
                     # Fecha Actualización (queda vacío si no se especifica)
                     f_act,
                     f_desc,         # Fecha Descarga
-                    str(nuevo_estado)
+                    str(nuevo_estado),
+                    "", "", "", ""  # Modelo / Detalle / Fecha Gemini / Evaluación
                 ]
 
                 sheet_service.spreadsheets().values().append(
@@ -408,7 +442,7 @@ def actualizar_estado_google_sheets(
                 return False
 
         # Normalizar a 9 columnas si la fila ya existía
-        while len(fila_actual) < 9:
+        while len(fila_actual) < NUM_COLUMNAS_ANIMES:
             fila_actual.append("")
 
         # Actualizar campos de enlace y fuentes solo si se pasaron
@@ -430,7 +464,7 @@ def actualizar_estado_google_sheets(
 
         fila_actual[8] = str(nuevo_estado)
 
-        celda_destino = f"{nombre_hoja}!A{fila_encontrada_num}:I{fila_encontrada_num}"
+        celda_destino = f"{nombre_hoja}!A{fila_encontrada_num}:M{fila_encontrada_num}"
 
         sheet_service.spreadsheets().values().update(
             spreadsheetId=SPREADSHEET_ID,
@@ -445,6 +479,70 @@ def actualizar_estado_google_sheets(
 
     except Exception as e:
         logging.error(f"❌ Error al actualizar Google Sheets: {e}")
+        return False
+
+
+def registrar_gemini_en_sheets(
+    sheet_service,
+    nombre_anime,
+    episodio,
+    modelo,
+    detalle,
+    fecha_procesamiento=None,
+    nombre_hoja="Animes",
+):
+    """
+    Escribe SOLO las columnas J:L (Modelo Gemini, Detalle Gemini, Fecha
+    Procesamiento Gemini) de la fila del anime/episodio. No toca el resto de la
+    fila (ni la columna M "Evaluación Gemini", que llena el bot de Telegram), así que no choca con las descargas. Si la fila no existe, no la crea.
+    """
+    if not sheet_service:
+        logging.error("❌ No hay conexión activa con Google Sheets.")
+        return False
+
+    try:
+        resultado = sheet_service.spreadsheets().values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"{nombre_hoja}!A:B"
+        ).execute()
+        filas = resultado.get("values", [])
+
+        fila_num = None
+        for index, fila in enumerate(filas[1:], start=2):
+            if len(fila) >= 2 \
+                    and str(fila[0]).strip().lower() == str(nombre_anime).strip().lower() \
+                    and str(fila[1]).strip() == str(episodio).strip():
+                fila_num = index
+                break
+
+        if fila_num is None:
+            logging.warning(
+                f"⚠️ Gemini: no se encontró '{nombre_anime}' Ep. {episodio} en Sheets.")
+            return False
+
+        fecha = fecha_procesamiento or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        sheet_service.spreadsheets().values().batchUpdate(
+            spreadsheetId=SPREADSHEET_ID,
+            body={
+                "valueInputOption": "USER_ENTERED",
+                "data": [
+                    # Encabezados (por si la hoja todavía tiene solo A:I)
+                    {"range": f"{nombre_hoja}!J1:M1",
+                     "values": [ENCABEZADOS_ANIMES[9:13]]},
+                    {"range": f"{nombre_hoja}!J{fila_num}:L{fila_num}",
+                     "values": [[str(modelo or ""), str(detalle or "")[:500], fecha]]},
+                ],
+            },
+        ).execute()
+
+        logging.info(
+            f"🤖 Sheets ← Gemini: '{nombre_anime}' Ep. {episodio} | "
+            f"modelo={modelo or '-'} | {str(detalle)[:80]}")
+        return True
+
+    except Exception as e:
+        logging.error(f"❌ Error al registrar Gemini en Google Sheets: {e}")
         return False
 
 
