@@ -13,13 +13,20 @@ Marcas de tiempo:
     Solo Gemini: se le envía una versión liviana del episodio y devuelve los tiempos de OP/ED.
 
 Archivos:
-    El episodio original NO se borra ni se mueve: se renombra a "Original_<nombre>"
-    en su misma carpeta, y el episodio procesado queda con el nombre original (.mp4).
+    Dentro de la carpeta de cada fecha (o de donde esté el episodio) se crean dos subcarpetas:
+        <carpeta>/procesados/Episodio.mp4   -> el episodio acelerado
+        <carpeta>/originales/Episodio.mkv   -> el episodio original, sin cambiar de nombre
+
+Avisos por Telegram (usa notificaciones_telegram.enviar_mensaje_telegram):
+    - Cada episodio procesado: archivo, modelo de Gemini que detectó OP/ED, tiempos y duración.
+    - Cada fallo: archivo y el motivo (cuota de Gemini, modelo no disponible, FFmpeg, etc.).
+    - Si el script no puede iniciar (sin carpeta, sin ffmpeg, sin clave de Gemini).
 
 Requisitos:
     pip install google-genai python-dotenv
     ffmpeg.exe junto al script (o ffmpeg en el PATH); ffprobe es opcional
     Clave de Gemini: variable GEMINI_API_KEY o archivo gemini_key.txt junto al script
+    notificaciones_telegram.py con enviar_mensaje_telegram(texto)  (opcional)
 
 Uso:
     python anime_x3.py "D:/Anime/entrada" "D:/Anime/salida"
@@ -45,6 +52,12 @@ from dotenv import load_dotenv
 
 
 load_dotenv()
+
+# Avisos por Telegram: si el módulo no existe, el script funciona igual (solo sin avisos)
+try:
+    from notificaciones_telegram import enviar_mensaje_telegram
+except ImportError:
+    enviar_mensaje_telegram = None
 # --------------------------------------------------------------------------- #
 # Configuración
 # --------------------------------------------------------------------------- #
@@ -121,6 +134,34 @@ def run_low_priority(cmd: list[str]) -> subprocess.CompletedProcess:
     else:
         kwargs["preexec_fn"] = lambda: os.nice(10)
     return subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+
+
+def fmt_dur(seconds: float) -> str:
+    """1443 -> '24:03' ; 3725 -> '1:02:05'."""
+    m, s = divmod(int(round(seconds)), 60)
+    h, m = divmod(m, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+_aviso_sin_telegram = False
+
+
+def notificar(texto: str) -> None:
+    """Envía un aviso por Telegram. Nunca debe romper el procesamiento."""
+    global _aviso_sin_telegram
+    if enviar_mensaje_telegram is None:
+        if not _aviso_sin_telegram:
+            log.warning("No encuentro notificaciones_telegram.py: no se enviarán avisos.")
+            _aviso_sin_telegram = True
+        return
+    texto = texto[:3900]                       # límite de Telegram: 4096 caracteres
+    try:
+        enviar_mensaje_telegram(texto)
+    except Exception:
+        try:                                   # reintento sin caracteres que rompen Markdown/HTML
+            enviar_mensaje_telegram(re.sub(r"[_*`\[\]<>&]", " ", texto))
+        except Exception as e:
+            log.warning("No pude enviar el aviso a Telegram: %s", e)
 
 
 # --------------------------------------------------------------------------- #
@@ -382,11 +423,14 @@ def registrar_gemini(src: Path, in_dir: Path, modelo: str, detalle: str) -> None
 # --------------------------------------------------------------------------- #
 # Validación y construcción de tramos
 # --------------------------------------------------------------------------- #
-def validate_range(r, duration: float, name: str | None = None):
-    """Devuelve (inicio, fin) o None. Con `name` informa por qué se descarta."""
+def validate_range(r, duration: float, name: str | None = None, reasons: list | None = None):
+    """Devuelve (inicio, fin) o None. Con `name` informa por qué se descarta
+    (en el log y, si se pasa `reasons`, también en esa lista)."""
     def say(level, msg, *a):
         if name:
             log.log(level, msg, *a)
+            if reasons is not None:
+                reasons.append((msg % a).strip().rstrip(".").replace("Gemini: ", ""))
 
     if not r or r[0] is None or r[1] is None:
         say(logging.INFO, "  Gemini: sin %s.", name)
@@ -408,8 +452,9 @@ def validate_range(r, duration: float, name: str | None = None):
     return (s, e)
 
 
-def validate_marks(raw: dict, duration: float, verbose: bool = True) -> dict:
-    return {k: validate_range(raw.get(k), duration, k.upper() if verbose else None)
+def validate_marks(raw: dict, duration: float, verbose: bool = True,
+                   reasons: list | None = None) -> dict:
+    return {k: validate_range(raw.get(k), duration, k.upper() if verbose else None, reasons)
             for k in ("op", "ed")}
 
 
@@ -532,15 +577,19 @@ def render(src: Path, tmp_dst: Path, segs, speed: float, info: dict, threads: in
 # --------------------------------------------------------------------------- #
 # Orquestación por archivo
 # --------------------------------------------------------------------------- #
-def get_marks(src: Path, info: dict, args, cache: dict, cache_path: Path) -> tuple[dict, str]:
+def get_marks(src: Path, info: dict, args, cache: dict, cache_path: Path) -> tuple[dict, str, dict]:
+    """Devuelve (marcas, fuente, detalle). detalle = {"model", "reason", "intentos"}."""
     duration = info["duration"]
     gkey = f"gemini:{src.name}:{src.stat().st_size}"
     marks = {"op": None, "ed": None}
+    detail = {"model": None, "reason": None, "intentos": []}
 
     if gkey in cache["marks"]:
-        marks = validate_marks(cache["marks"][gkey], duration, verbose=False)
+        entry = cache["marks"][gkey]
+        marks = validate_marks(entry, duration, verbose=False)
         if marks["op"] or marks["ed"]:
             log.info("  Marcas de Gemini tomadas de la caché.")
+            detail["model"] = f"{entry.get('model') or 'modelo desconocido'} (marcas guardadas en caché)"
         else:
             log.info(
                 "  La caché de este episodio no tiene marcas válidas; se consulta de nuevo.")
@@ -555,8 +604,11 @@ def get_marks(src: Path, info: dict, args, cache: dict, cache_path: Path) -> tup
             log.error("  Gemini falló: %s", e)
             raw = {"op": None, "ed": None}
             meta.setdefault("modelo", "")
-            meta["detalle"] = f"error: {str(e)[:150]}"
-        marks = validate_marks(raw, duration)
+            meta.setdefault("fallos", [])
+            meta["detalle"] = f"error al preparar o subir el video a Gemini: {str(e)[-250:]}"
+        reasons: list[str] = []
+        marks = validate_marks(raw, duration, reasons=reasons)
+        detail["intentos"] = meta.get("fallos", [])
 
         # ---- Resultado para la hoja ----
         def _fmt(r):
@@ -573,15 +625,23 @@ def get_marks(src: Path, info: dict, args, cache: dict, cache_path: Path) -> tup
         # Si ningún modelo respondió, se deja constancia del primero que se intentó
         modelo_hoja = modelo_ok or f"{args.gemini_model} (sin respuesta)"
         registrar_gemini(src, cache_path.parent, modelo_hoja, detalle)
+
         if marks["op"] or marks["ed"]:
+            detail["model"] = modelo_ok or "modelo desconocido"
             # Solo se guarda lo válido: así nunca se reutiliza una respuesta mala
             cache["marks"][gkey] = {
-                k: list(v) if v else None for k, v in marks.items()}
+                **{k: list(v) if v else None for k, v in marks.items()},
+                "model": modelo_ok}
             save_cache(cache_path, cache)
+        elif modelo_ok:
+            detail["reason"] = (f"Gemini ({modelo_ok}) respondió, pero sin marcas utilizables"
+                                + (": " + "; ".join(reasons) if reasons else ""))
+        else:
+            detail["reason"] = meta.get("detalle") or "sin respuesta"
 
     if marks["op"] or marks["ed"]:
-        return marks, "Gemini"
-    return marks, "none"
+        return marks, "Gemini", detail
+    return marks, "none", detail
 
 
 def unique_path(p: Path) -> Path:
@@ -605,12 +665,28 @@ def process_file(src: Path, args, in_dir: Path, cache, cache_path) -> bool:
         log.warning("Ya existe '%s'; se omite y el original no se toca.", dst)
         return True
 
+    t0 = time.time()
     log.info("Procesando: %s", rel)
-    info = probe(src)
-    marks, source = get_marks(src, info, args, cache, cache_path)
+    try:
+        info = probe(src)
+    except Exception as e:
+        causa = (f"ffprobe terminó con error {e.returncode}"
+                 if isinstance(e, subprocess.CalledProcessError) else str(e)[-300:])
+        raise RuntimeError(
+            f"no pude leer el video (¿archivo dañado o incompleto?): {causa}") from e
+
+    marks, source, detail = get_marks(src, info, args, cache, cache_path)
     if source == "none":
         log.error(
             "  Sin marcas de tiempo para %s. Se deja el archivo sin tocar.", rel)
+        intentos = ""
+        if detail["intentos"] and "todos los modelos" not in (detail["reason"] or ""):
+            intentos = "\n⚠️ Modelos que fallaron: " + " | ".join(detail["intentos"])
+        notificar(f"❌ No se pudo procesar el episodio (x{args.speed:g})\n"
+                  f"📁 {rel}\n"
+                  f"❗ Motivo: {detail['reason'] or 'Gemini no devolvió marcas de OP/ED'}"
+                  f"{intentos}\n"
+                  f"↩️ El original quedó sin tocar.")
         return False
 
     segs = build_segments(info["duration"], marks["op"], marks["ed"])
@@ -622,8 +698,12 @@ def process_file(src: Path, args, in_dir: Path, cache, cache_path) -> bool:
 
     processed_dir.mkdir(exist_ok=True)
     tmp_dst = dst.with_name(dst.stem + ".part.mp4")
-    render(src, tmp_dst, segs, args.speed, info,
-           args.threads, args.preset, args.crf)
+    try:
+        render(src, tmp_dst, segs, args.speed, info,
+               args.threads, args.preset, args.crf)
+    except Exception as e:
+        raise RuntimeError("falló FFmpeg al acelerar el video (el original no se tocó): "
+                           f"{str(e)[-400:]}") from e
 
     # 1) el original se mueve a "originales" (mismo nombre)
     # 2) el acelerado queda en "procesados"
@@ -639,6 +719,19 @@ def process_file(src: Path, args, in_dir: Path, cache, cache_path) -> bool:
 
     log.info("  OK -> %s", dst.relative_to(in_dir))
     log.info("  Original -> %s", original.relative_to(in_dir))
+
+    # ---- Aviso por Telegram ----
+    nueva = sum((e - s) / (args.speed if fast else 1.0) for s, e, fast in segs)
+    previos = ""
+    if detail["intentos"]:
+        previos = "\n⚠️ Antes fallaron: " + " | ".join(detail["intentos"])
+    notificar(f"✅ Episodio procesado (x{args.speed:g})\n"
+              f"📁 {rel}\n"
+              f"🤖 Modelo de Gemini: {detail['model'] or 'desconocido'}"
+              f"{previos}\n"
+              f"🎬 OP: {fmt(marks['op'])} | ED: {fmt(marks['ed'])}\n"
+              f"⏱ Duración: {fmt_dur(info['duration'])} → {fmt_dur(nueva)}\n"
+              f"🕒 Tiempo de proceso: {fmt_dur(time.time() - t0)}")
     return True
 
 
@@ -669,6 +762,8 @@ def ejecucion_recortador() -> int:
     in_dir = args.input.resolve()
     if not in_dir.is_dir():
         print(f"La carpeta de entrada no existe: {in_dir}")
+        notificar("❌ El procesador x3 no pudo iniciar\n"
+                  f"❗ Motivo: la carpeta de entrada no existe: {in_dir}")
         return 1
 
     # Log y caché quedan en la carpeta de entrada (se conserva la caché existente)
@@ -686,6 +781,8 @@ def ejecucion_recortador() -> int:
     if not FFMPEG:
         log.error(
             "No encuentro ffmpeg. Pon ffmpeg.exe en %s o agrégalo al PATH.", SCRIPT_DIR)
+        notificar("❌ El procesador x3 no pudo iniciar\n"
+                  f"❗ Motivo: no encuentro ffmpeg (debe estar en {SCRIPT_DIR} o en el PATH)")
         return 1
     log.info("ffmpeg: %s", FFMPEG)
     if FFPROBE:
@@ -697,6 +794,8 @@ def ejecucion_recortador() -> int:
     if not load_gemini_key():
         log.error("Falta la clave de Gemini (GEMINI_API_KEY en .env/entorno o %s).",
                   SCRIPT_DIR / "gemini_key.txt")
+        notificar("❌ El procesador x3 no pudo iniciar\n"
+                  "❗ Motivo: falta la clave de Gemini (GEMINI_API_KEY)")
         return 1
 
     cache_path = in_dir / "anime_x3_cache.json"
@@ -743,13 +842,15 @@ def ejecucion_recortador() -> int:
             except Exception as e:
                 fail += 1
                 log.error("  Error en %s: %s", src.name, e)
+                notificar(f"❌ Error al procesar el episodio (x{args.speed:g})\n"
+                          f"📁 {src.relative_to(in_dir)}\n"
+                          f"❗ Motivo: {str(e)[-500:]}")
     except KeyboardInterrupt:
         log.warning("Interrumpido por el usuario.")
 
     log.info("Terminado. OK: %d | Fallidos/sin marcas: %d", ok, fail)
     return 0 if fail == 0 else 2
 
-'''
+
 if __name__ == "__main__":
-    sys.exit(main())
-'''
+    sys.exit(ejecucion_recortador())

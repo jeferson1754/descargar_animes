@@ -1565,7 +1565,10 @@ def actualizar_sheet(**kwargs):
         del kwargs[clave]
 
     fecha = kwargs.get("fecha_actualizacion")
-    if not isinstance(fecha, str) or not fecha.strip():
+    if str(kwargs.get("nuevo_estado", "")).strip().lower() == "completado":
+        # Al completar solo se graba Fecha Descarga; Fecha Actualización no se toca
+        kwargs.pop("fecha_actualizacion", None)
+    elif not isinstance(fecha, str) or not fecha.strip():
         kwargs["fecha_actualizacion"] = _ahora()
 
     for clave, valor in list(kwargs.items()):
