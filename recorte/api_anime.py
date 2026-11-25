@@ -46,7 +46,7 @@ import sys
 import tempfile
 import time
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -76,12 +76,38 @@ PROCESSED_DIRNAME = "procesados"
 ORIGINALS_DIRNAME = "originales"
 DEFAULT_GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 
+HORAS_EJECUCION = (15, 19)
+HORA_REPROCESO_MODELO = 19
+VERSION_MODELO_MINIMA = (3, 6)
+
 MODELOS_FALLBACK = [
+    "gemini-4-hydrogen",
     "gemini-3.8-flash",
     "gemini-3.6-flash",
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite"
 ]
+
+
+def _version_modelo(nombre: str | None) -> tuple[int, int] | None:
+    """Extrae (mayor, menor) de un nombre de modelo Gemini (ej. 'gemini-3.6-flash' -> (3, 6))."""
+    if not nombre:
+        return None
+    m = re.search(r"gemini-(\d+)(?:\.(\d+))?", str(nombre).lower())
+    if not m:
+        return None
+    return (int(m.group(1)), int(m.group(2) or 0))
+
+
+def _modelos_superiores(model_preferido: str, version_min_exclusiva: tuple[int, int]) -> list[str]:
+    """Modelos disponibles con versión estrictamente superior a `version_min_exclusiva`."""
+    candidatos = [model_preferido] + [m for m in MODELOS_FALLBACK if m != model_preferido]
+    resultado = []
+    for m in candidatos:
+        v = _version_modelo(m)
+        if v is not None and v > version_min_exclusiva:
+            resultado.append(m)
+    return resultado
 
 # versiones anteriores renombraban así; se ignoran
 LEGACY_PREFIX = "original_"
@@ -218,7 +244,8 @@ def _motivo_corto(error: Exception) -> str:
 
 
 def gemini_marks(src: Path, duration: float, threads: int, model: str,
-                 meta: dict | None = None) -> dict:
+                 meta: dict | None = None,
+                 modelos_permitidos: list[str] | None = None) -> dict:
     """
     Devuelve {"op": [...]|None, "ed": [...]|None}.
     Si se pasa `meta`, se llena con:
@@ -230,6 +257,19 @@ def gemini_marks(src: Path, duration: float, threads: int, model: str,
         meta = {}
     meta.update({"modelo": "", "fallos": [], "detalle": ""})
     marks = {"op": None, "ed": None}
+
+    # Reorganizamos la lista para intentar primero con el modelo que pasas por argumento,
+    # y si falla por cuota, usamos los demás de respaldo (o usamos la lista restringida).
+    modelos_a_probar = (
+        list(modelos_permitidos)
+        if modelos_permitidos is not None
+        else [model] + [m for m in MODELOS_FALLBACK if m != model]
+    )
+    if not modelos_a_probar:
+        meta["detalle"] = "no hay modelos superiores disponibles"
+        log.warning("No hay modelos de Gemini disponibles para probar.")
+        return marks
+
     api_key = load_gemini_key()
     if not api_key:
         meta["detalle"] = "falta la clave de Gemini"
@@ -248,10 +288,6 @@ def gemini_marks(src: Path, duration: float, threads: int, model: str,
     # Con límite de espera: sin esto, una petición lenta parece "colgada"
     client = genai.Client(
         api_key=api_key, http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS))
-
-    # Reorganizamos la lista para intentar primero con el modelo que pasas por argumento,
-    # y si falla por cuota, usamos los demás de respaldo.
-    modelos_a_probar = [model] + [m for m in MODELOS_FALLBACK if m != model]
 
     with tempfile.TemporaryDirectory() as tmp:
         proxy = Path(tmp) / "proxy.mp4"
@@ -414,10 +450,17 @@ def _ubicar_episodio(src: Path, in_dir: Path) -> tuple[str, str] | None:
     return mejor
 
 
-def registrar_gemini(src: Path, in_dir: Path, modelo: str, detalle: str) -> None:
+def registrar_gemini(
+    src: Path,
+    in_dir: Path,
+    modelo: str,
+    detalle: str,
+    ubicacion: tuple[str, str] | None = None,
+) -> None:
     """Guarda modelo, detalle y fecha de procesamiento de Gemini en la hoja."""
     try:
-        ubicacion = _ubicar_episodio(src, in_dir)
+        if ubicacion is None:
+            ubicacion = _ubicar_episodio(src, in_dir)
         if not ubicacion:
             log.warning("  Sheets: no pude saber a qué anime/episodio corresponde '%s'; "
                         "no se guardó lo de Gemini.", src.name)
@@ -589,14 +632,25 @@ def render(src: Path, tmp_dst: Path, segs, speed: float, info: dict, threads: in
 # --------------------------------------------------------------------------- #
 # Orquestación por archivo
 # --------------------------------------------------------------------------- #
-def get_marks(src: Path, info: dict, args, cache: dict, cache_path: Path) -> tuple[dict, str, dict]:
+def get_marks(
+    src: Path,
+    info: dict,
+    args,
+    cache: dict,
+    cache_path: Path,
+    forzar_gemini: bool = False,
+    modelos_permitidos: list[str] | None = None,
+    registrar_fallo_sheets: bool = True,
+    registrar_resultado_sheets: bool = True,
+    ubicacion_sheets: tuple[str, str] | None = None,
+) -> tuple[dict, str, dict]:
     """Devuelve (marcas, fuente, detalle). detalle = {"model", "reason", "intentos"}."""
     duration = info["duration"]
     gkey = f"gemini:{src.name}:{src.stat().st_size}"
     marks = {"op": None, "ed": None}
     detail = {"model": None, "reason": None, "intentos": []}
 
-    if gkey in cache["marks"]:
+    if not forzar_gemini and gkey in cache["marks"]:
         entry = cache["marks"][gkey]
         marks = validate_marks(entry, duration, verbose=False)
         if marks["op"] or marks["ed"]:
@@ -610,8 +664,10 @@ def get_marks(src: Path, info: dict, args, cache: dict, cache_path: Path) -> tup
         log.info("  Consultando Gemini para detectar OP/ED...")
         meta: dict = {}
         try:
-            raw = gemini_marks(src, duration, args.threads,
-                               args.gemini_model, meta)
+            raw = gemini_marks(
+                src, duration, args.threads, args.gemini_model, meta,
+                modelos_permitidos=modelos_permitidos,
+            )
         except Exception as e:
             log.error("  Gemini falló: %s", e)
             raw = {"op": None, "ed": None}
@@ -636,7 +692,12 @@ def get_marks(src: Path, info: dict, args, cache: dict, cache_path: Path) -> tup
             detalle = "❌ No funcionó: " + (meta.get("detalle") or "sin respuesta")
         # Si ningún modelo respondió, se deja constancia del primero que se intentó
         modelo_hoja = modelo_ok or f"{args.gemini_model} (sin respuesta)"
-        registrar_gemini(src, cache_path.parent, modelo_hoja, detalle)
+        if registrar_resultado_sheets and (
+                (marks["op"] or marks["ed"]) or registrar_fallo_sheets):
+            registrar_gemini(
+                src, cache_path.parent, modelo_hoja, detalle,
+                ubicacion=ubicacion_sheets,
+            )
 
         if marks["op"] or marks["ed"]:
             detail["model"] = modelo_ok or "modelo desconocido"
@@ -747,6 +808,269 @@ def process_file(src: Path, args, in_dir: Path, cache, cache_path) -> bool:
     return True
 
 
+def _es_subruta(base_dir: Path, p: Path) -> bool:
+    try:
+        p.resolve().relative_to(base_dir.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _buscar_archivos_reproceso(in_dir: Path, item: dict, hoy: str) -> tuple[Path | None, Path | None]:
+    """
+    Localiza (archivo_original, archivo_procesado_anterior) para una fila de Sheets.
+    """
+    nombre = str(item.get("nombre", "")).strip()
+    episodio = str(item.get("episodio", "")).strip()
+    archivo_rel = str(item.get("archivo", "")).strip().replace("\\", "/")
+
+    posibles_pares: list[tuple[Path, Path]] = []
+    if archivo_rel and not archivo_rel.lower().startswith("[eliminado]"):
+        rel = Path(archivo_rel.lstrip("/"))
+        if not rel.is_absolute() and ".." not in rel.parts:
+            posibles_pares.append((
+                in_dir / rel.parent / ORIGINALS_DIRNAME / rel.name,
+                in_dir / rel.parent / PROCESSED_DIRNAME / f"{rel.stem}.mp4",
+            ))
+            if rel.parent != Path("."):
+                posibles_pares.append((
+                    in_dir / ORIGINALS_DIRNAME / rel.name,
+                    in_dir / PROCESSED_DIRNAME / f"{rel.stem}.mp4",
+                ))
+
+    # Respaldo 1: descargas_index.json
+    indice_path = in_dir / INDICE_DESCARGAS
+    if indice_path.is_file():
+        try:
+            datos = json.loads(indice_path.read_text(encoding="utf-8"))
+            for ruta_abs, info in datos.items():
+                if not isinstance(info, dict):
+                    continue
+                if (
+                    str(info.get("nombre", "")).strip().lower() == nombre.lower()
+                    and str(info.get("episodio", "")).strip() == episodio
+                ):
+                    p = Path(ruta_abs)
+                    posibles_pares.append((
+                        p.parent / ORIGINALS_DIRNAME / p.name,
+                        p.parent / PROCESSED_DIRNAME / f"{p.stem}.mp4",
+                    ))
+        except Exception:
+            pass
+
+    for orig, proc in posibles_pares:
+        if orig.is_file() and _es_subruta(in_dir, orig):
+            proc_existente = proc if (proc.is_file() and _es_subruta(in_dir, proc)) else None
+            return orig, proc_existente
+
+    # Respaldo 2: escanear carpeta del día (<in_dir>/<hoy>/originales)
+    orig_dir_hoy = in_dir / hoy / ORIGINALS_DIRNAME
+    if orig_dir_hoy.is_dir():
+        for cand in sorted(orig_dir_hoy.iterdir()):
+            if not cand.is_file() or cand.suffix.lower() not in VIDEO_EXTS:
+                continue
+            ubic = _ubicar_episodio(cand, in_dir)
+            if ubic and ubic[0].strip().lower() == nombre.lower() and str(ubic[1]).strip() == episodio:
+                proc = in_dir / hoy / PROCESSED_DIRNAME / f"{cand.stem}.mp4"
+                return cand, proc if proc.is_file() else None
+
+    return None, None
+
+
+def _reprocesar_episodio_superior(
+    item: dict,
+    original: Path,
+    procesado_anterior: Path | None,
+    args,
+    in_dir: Path,
+    cache: dict,
+    cache_path: Path,
+) -> str:
+    """
+    Reprocesa `original` exigiendo un modelo estrictamente superior al previo.
+    Solo elimina `procesado_anterior` si el nuevo render termina con éxito.
+    Devuelve 'ok', 'sin_mejora' o 'error'.
+    """
+    nombre = str(item.get("nombre", "")).strip()
+    episodio = str(item.get("episodio", "")).strip()
+    modelo_anterior = str(item.get("modelo_gemini", "")).strip()
+    v_anterior = _version_modelo(modelo_anterior)
+    if v_anterior is None:
+        return "sin_mejora"
+
+    candidatos_modelos = _modelos_superiores(args.gemini_model, v_anterior)
+    if not candidatos_modelos:
+        log.warning("  No hay modelos superiores a '%s' configurados para %s Ep. %s.",
+                    modelo_anterior, nombre, episodio)
+        return "sin_mejora"
+
+    t0 = time.time()
+    rel = original.relative_to(in_dir)
+    log.info("♻️ Reprocesando (%s < 3.6): %s | modelos permitidos: %s",
+             modelo_anterior, rel, ", ".join(candidatos_modelos))
+
+    try:
+        info = probe(original)
+    except Exception as e:
+        log.error("  No pude leer el original %s: %s", original.name, e)
+        return "error"
+
+    marks, source, detail = get_marks(
+        original, info, args, cache, cache_path,
+        forzar_gemini=True,
+        modelos_permitidos=candidatos_modelos,
+        registrar_fallo_sheets=False,
+        registrar_resultado_sheets=False,
+        ubicacion_sheets=(nombre, episodio),
+    )
+
+    modelo_nuevo = detail.get("model") or ""
+    v_nuevo = _version_modelo(modelo_nuevo)
+    if source == "none" or v_nuevo is None or v_nuevo <= v_anterior:
+        log.warning(
+            "  No se obtuvo un modelo superior a '%s' para %s Ep. %s (%s). "
+            "Se conserva el procesado anterior.",
+            modelo_anterior, nombre, episodio,
+            detail.get("reason") or "sin respuesta",
+        )
+        return "sin_mejora"
+
+    segs = build_segments(info["duration"], marks["op"], marks["ed"])
+
+    def fmt(r):
+        return f"{r[0]:.0f}-{r[1]:.0f} s" if r else "no tiene"
+
+    log.info("  Mejora confirmada (%s -> %s) | OP: %s | ED: %s | %d tramos",
+             modelo_anterior, modelo_nuevo, fmt(marks["op"]), fmt(marks["ed"]), len(segs))
+
+    processed_dir = original.parent.parent / PROCESSED_DIRNAME
+    processed_dir.mkdir(exist_ok=True)
+    dst = procesado_anterior if procesado_anterior else (processed_dir / f"{original.stem}.mp4")
+    tmp_dst = dst.with_name(dst.stem + ".reproceso.part.mp4")
+
+    try:
+        render(original, tmp_dst, segs, args.speed, info,
+               args.threads, args.preset, args.crf)
+    except Exception as e:
+        log.error("  Falló FFmpeg al reprocesar %s (se conserva el procesado anterior): %s",
+                  original.name, str(e)[-400:])
+        return "error"
+
+    try:
+        tmp_dst.replace(dst)
+    except Exception as e:
+        tmp_dst.unlink(missing_ok=True)
+        log.error("  ❌ No se pudo guardar el nuevo procesado %s: %s", dst.name, e)
+        return "error"
+
+    if procesado_anterior:
+        log.info("  🗑️ Procesado anterior reemplazado: %s",
+                 procesado_anterior.relative_to(in_dir))
+
+    def _fmt(r):
+        return f"{r[0]:.0f}-{r[1]:.0f}s" if r else "no tiene"
+
+    detalle = f"✅ Funcionó | OP: {_fmt(marks['op'])} | ED: {_fmt(marks['ed'])}"
+    if detail["intentos"]:
+        detalle += " | antes falló: " + "; ".join(detail["intentos"])
+    registrar_gemini(
+        original, in_dir, modelo_nuevo, detalle,
+        ubicacion=(nombre, episodio),
+    )
+
+    log.info("  OK (reprocesado) -> %s", dst.relative_to(in_dir))
+
+    nueva = sum((e - s) / (args.speed if fast else 1.0) for s, e, fast in segs)
+    previos = ""
+    if detail["intentos"]:
+        previos = "\n⚠️ Antes fallaron: " + " | ".join(detail["intentos"])
+    notificar(f"♻️ Episodio reprocesado con modelo superior (x{args.speed:g})\n"
+              f"📁 {dst.relative_to(in_dir)}\n"
+              f"🤖 Modelo: {modelo_anterior} → {modelo_nuevo}"
+              f"{previos}\n"
+              f"🎬 OP: {fmt(marks['op'])} | ED: {fmt(marks['ed'])}\n"
+              f"⏱ Duración: {fmt_dur(info['duration'])} → {fmt_dur(nueva)}\n"
+              f"🕒 Tiempo de proceso: {fmt_dur(time.time() - t0)}")
+    return "ok"
+
+
+def reprocesar_inferiores_del_dia(args, in_dir: Path, cache: dict, cache_path: Path) -> None:
+    """
+    Revisa Google Sheets para el día actual: los episodios procesados con un
+    modelo Gemini inferior a 3.6 se reprocesan desde 'originales/' exigiendo
+    un modelo estrictamente superior y eliminando el procesado anterior.
+    """
+    service = _servicio_sheets()
+    if not service:
+        log.warning("⚠️ Sheets no disponible: se omite la revisión de modelos < 3.6.")
+        return
+
+    try:
+        filas = _importar_base_excel().leer_animes_pendientes(service)
+    except Exception as e:
+        log.warning("⚠️ No se pudo leer Google Sheets para revisar modelos < 3.6: %s", e)
+        return
+
+    hoy = datetime.now().strftime("%Y-%m-%d")
+    candidatos = []
+    vistos = set()
+
+    for item in filas:
+        archivo = str(item.get("archivo", "")).strip().lower()
+        if archivo.startswith("[eliminado]"):
+            continue
+
+        fecha_g = str(item.get("fecha_gemini", "")).strip()
+        fecha_d = str(item.get("fecha_descarga", "")).strip()
+        es_hoy = fecha_g.startswith(hoy) if fecha_g else fecha_d.startswith(hoy)
+        if not es_hoy:
+            continue
+
+        modelo = str(item.get("modelo_gemini", "")).strip()
+        if not modelo or "sin respuesta" in modelo.lower():
+            continue
+
+        ver = _version_modelo(modelo)
+        if ver is None or ver >= VERSION_MODELO_MINIMA:
+            continue
+
+        clave = (str(item.get("nombre", "")).strip().lower(), str(item.get("episodio", "")).strip())
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        candidatos.append(item)
+
+    if not candidatos:
+        log.info("✨ Revisión de las 19:00: no hay episodios de hoy (%s) con modelo < 3.6.", hoy)
+        return
+
+    log.info("🔍 Revisión de las 19:00: %d episodio(s) de hoy (%s) con modelo < 3.6.",
+             len(candidatos), hoy)
+
+    ok = sin_mejora = err = 0
+    for item in candidatos:
+        original, proc_anterior = _buscar_archivos_reproceso(in_dir, item, hoy)
+        if not original:
+            log.warning("  ⚠️ No se encontró archivo original en '%s' para %s Ep. %s (%s).",
+                        ORIGINALS_DIRNAME, item.get("nombre"), item.get("episodio"),
+                        item.get("modelo_gemini"))
+            err += 1
+            continue
+
+        res = _reprocesar_episodio_superior(
+            item, original, proc_anterior, args, in_dir, cache, cache_path
+        )
+        if res == "ok":
+            ok += 1
+        elif res == "sin_mejora":
+            sin_mejora += 1
+        else:
+            err += 1
+
+    log.info("♻️ Reproceso 19:00 terminado. Mejorados: %d | Sin mejora: %d | Errores: %d",
+             ok, sin_mejora, err)
+
+
 def ejecucion_recortador() -> int:
     ap = argparse.ArgumentParser(
         description="Anime xN con OP/ED a velocidad normal.")
@@ -763,6 +1087,8 @@ def ejecucion_recortador() -> int:
     ap.add_argument("--crf", type=int, default=23,
                     help="Calidad x264 (def: 23)")
     ap.add_argument("--gemini-model", default=DEFAULT_GEMINI_MODEL)
+    ap.add_argument("--forzar", action="store_true",
+                    help="Ejecuta aunque esté fuera de horario (15:00 / 19:00)")
     args = ap.parse_args()
 
     for stream in (sys.stdout, sys.stderr):
@@ -790,6 +1116,22 @@ def ejecucion_recortador() -> int:
         log.warning("El segundo argumento (%s) se ignora: los procesados van a "
                     "<carpeta del episodio>/%s.", args.output, PROCESSED_DIRNAME)
 
+    ahora = datetime.now()
+    hora = ahora.hour
+    hoy = ahora.strftime("%Y-%m-%d")
+    cache_path = in_dir / "anime_x3_cache.json"
+    cache = load_cache(cache_path)
+
+    if not args.forzar:
+        if hora not in HORAS_EJECUCION:
+            log.info("⏰ Fuera de horario de recorte (solo 15:00 y 19:00). Hora actual: %02d:%02d.",
+                     hora, ahora.minute)
+            return 0
+        runs = cache.setdefault("runs", {})
+        if hora in runs.get(hoy, []):
+            log.info("⏭️ El recorte de las %02d:00 ya se ejecutó hoy (%s); se omite.", hora, hoy)
+            return 0
+
     if not FFMPEG:
         log.error(
             "No encuentro ffmpeg. Pon ffmpeg.exe en %s o agrégalo al PATH.", SCRIPT_DIR)
@@ -810,8 +1152,12 @@ def ejecucion_recortador() -> int:
                   "❗ Motivo: falta la clave de Gemini (GEMINI_API_KEY)")
         return 1
 
-    cache_path = in_dir / "anime_x3_cache.json"
-    cache = load_cache(cache_path)
+    if not args.forzar:
+        fecha_limite = (ahora - timedelta(days=7)).strftime("%Y-%m-%d")
+        runs = {k: v for k, v in cache.get("runs", {}).items() if k >= fecha_limite}
+        runs.setdefault(hoy, []).append(hora)
+        cache["runs"] = runs
+        save_cache(cache_path, cache)
 
     skip_dirs = {PROCESSED_DIRNAME.lower(), ORIGINALS_DIRNAME.lower()}
 
@@ -843,6 +1189,7 @@ def ejecucion_recortador() -> int:
     log.info("Encontrados %d episodios en %s", len(files), in_dir)
 
     ok = fail = 0
+    interrumpido = False
     try:
         for n, src in enumerate(files, 1):
             log.info("[%d/%d]", n, len(files))
@@ -858,9 +1205,17 @@ def ejecucion_recortador() -> int:
                           f"📁 {src.relative_to(in_dir)}\n"
                           f"❗ Motivo: {str(e)[-500:]}")
     except KeyboardInterrupt:
+        interrumpido = True
         log.warning("Interrumpido por el usuario.")
+        if not args.forzar and hoy in cache.get("runs", {}) and hora in cache["runs"][hoy]:
+            cache["runs"][hoy].remove(hora)
+            save_cache(cache_path, cache)
 
     log.info("Terminado. OK: %d | Fallidos/sin marcas: %d", ok, fail)
+
+    if not interrumpido and hora == HORA_REPROCESO_MODELO:
+        reprocesar_inferiores_del_dia(args, in_dir, cache, cache_path)
+
     return 0 if fail == 0 else 2
 
 
