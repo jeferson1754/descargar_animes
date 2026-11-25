@@ -11,12 +11,14 @@ from animes.comparador import tomar_captura_express
 from animes.coincidencia import validar_coincidencia_anime
 from notificaciones_telegram import enviar_mensaje_telegram
 
-def extraer_nombres_anime(url, download_dir, max_reintentos=3):
+def extraer_nombres_anime(url, download_dir, max_reintentos=3, retornar_none_si_error=False):
     """Extrae únicamente los animes que tienen episodios pendientes
 
     detectando la clase 'episode-badge episode-pending'.
 
     Implementa hasta 'max_reintentos' en caso de fallos de red o del navegador.
+    Si ``retornar_none_si_error`` es True, devuelve None cuando falla la carga
+    de la página (distinguiéndolo de una tabla cargada con 0 pendientes).
     """
     for intento in range(1, max_reintentos + 1):
         driver = None
@@ -184,7 +186,7 @@ def extraer_nombres_anime(url, download_dir, max_reintentos=3):
             f"❌ Error al enviar notificación de fallo a Telegram: {e}"
         )
 
-    return []
+    return None if retornar_none_si_error else []
 
 
 def _driver_vivo(driver):

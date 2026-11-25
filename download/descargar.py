@@ -1578,7 +1578,7 @@ def actualizar_sheet(**kwargs):
             logging.warning(
                 f"⚠️ Se descartó un booleano en '{clave}' para no escribir TRUE/FALSE en la hoja.")
             del kwargs[clave]
-        elif clave in ("nuevo_enlace", "nueva_fuente", "fuentes_fallidas", "nuevo_estado") \
+        elif clave in ("nuevo_enlace", "nueva_fuente", "fuentes_fallidas", "nuevo_estado", "archivo") \
                 and valor is not None and not isinstance(valor, str):
             kwargs[clave] = str(valor)
 
@@ -2737,9 +2737,17 @@ def procesar_descarga_video(video, driver_servidor, sheet_service, download_dir,
                 f"🟢 Estado: Completado."
             )
 
+            ruta_descarga = ULTIMA_DESCARGA.pop("ruta", None)
             registrar_archivo_descargado(
-                download_dir, nombre, episodio_limpio,
-                ULTIMA_DESCARGA.pop("ruta", None))
+                download_dir, nombre, episodio_limpio, ruta_descarga)
+
+            archivo_relativo = None
+            if ruta_descarga:
+                try:
+                    archivo_relativo = os.path.relpath(
+                        ruta_descarga, download_dir).replace("\\", "/")
+                except ValueError:
+                    archivo_relativo = os.path.basename(ruta_descarga)
 
             if nombre and episodio:
                 actualizar_sheet(
@@ -2748,7 +2756,8 @@ def procesar_descarga_video(video, driver_servidor, sheet_service, download_dir,
                     nombre_anime=nombre,
                     episodio=episodio,
                     nuevo_estado="Completado",
-                    fuentes_fallidas=", ".join(lista_excluidas) if lista_excluidas else None
+                    fuentes_fallidas=", ".join(lista_excluidas) if lista_excluidas else None,
+                    archivo=archivo_relativo
                 )
 
                 marcar_anime_descargado_con_selenium(
@@ -2977,7 +2986,7 @@ def proceso_local_descargar_archivos(download_dir):
 
     if not registros_hoja:
         logging.info("ℹ️ No hay registros en Google Sheets.")
-        return
+        return False
 
     # 2. Filtramos los que tengan estado "Pendiente"
     videos_finales = [
@@ -2999,7 +3008,7 @@ def proceso_local_descargar_archivos(download_dir):
 
     if not videos_finales:
         logging.info("🎉 No hay animes pendientes por descargar.")
-        return
+        return False
 
     logging.info(f"\nAnimes listos para descargar ({len(videos_finales)}):")
     for idx, video in enumerate(videos_finales, 1):
@@ -3011,13 +3020,14 @@ def proceso_local_descargar_archivos(download_dir):
     driver_servidor = configurar_navegador(download_dir)
     if driver_servidor is None:
         logging.error("❌ No se pudo iniciar el navegador para las descargas.")
-        return
+        return False
 
     # Servidores (p. ej. 'mega') que se quedaron sin cuota durante ESTA ejecución
     servidores_sin_cuota = servidores_sin_cuota_vigentes()
     if servidores_sin_cuota:
         logging.info(f"⏳ Servidores sin cuota (vigente): {', '.join(sorted(servidores_sin_cuota))}")
 
+    descargas_exitosas = 0
     try:
         for video in videos_finales:
             link_descarga = video.get("link_descarga")
@@ -3041,13 +3051,14 @@ def proceso_local_descargar_archivos(download_dir):
                 f"Descargando: {video.get('nombre')} - Episodio {video.get('episodio_buscado')}")
             logging.info("=" * 60)
 
-            procesar_descarga_video(
+            if procesar_descarga_video(
                 video,
                 driver_servidor,
                 sheet_service,
                 download_dir,
                 servidores_sin_cuota,
-            )
+            ):
+                descargas_exitosas += 1
 
     finally:
         try:
@@ -3055,3 +3066,5 @@ def proceso_local_descargar_archivos(download_dir):
             logging.info("🔒 Driver de servidor cerrado.")
         except Exception:
             pass
+
+    return descargas_exitosas > 0

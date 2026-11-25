@@ -390,6 +390,18 @@ def _ubicar_episodio(src: Path, in_dir: Path) -> tuple[str, str] | None:
     except Exception:
         return None
 
+    try:
+        rel_src = src.resolve().relative_to(in_dir.resolve()).as_posix().lower()
+    except ValueError:
+        rel_src = src.name.lower()
+    nombre_src = src.name.lower()
+
+    for f in filas:
+        archivo_sheet = str(f.get("archivo", "")).strip().replace("\\", "/").lower()
+        if archivo_sheet and not archivo_sheet.startswith("[eliminado]"):
+            if archivo_sheet == rel_src or Path(archivo_sheet).name == nombre_src:
+                return str(f["nombre"]), str(f["episodio"])
+
     archivo = _norm(src.stem)
     numeros = {int(n) for n in re.findall(r"\d+", archivo)}
     mejor, largo = None, 0

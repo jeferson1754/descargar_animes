@@ -14,6 +14,8 @@ DOWNLOAD_DIR_2 = r"D:\Xampp\htdocs\descargar_animes\Descargas"
 SERVIDOR = "https://inventarioncc.infinityfreeapp.com/"
 # SERVIDOR = "http://localhost/"
 
+URL_ANIMES_VISTOS = f"{SERVIDOR}Anime/Emision/?faltantes=&accion=HOY"
+
 # ============================================================
 # FUENTES DE ANIME
 # ============================================================

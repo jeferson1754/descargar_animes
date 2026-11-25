@@ -19,16 +19,17 @@ SCOPES = [
 
 SPREADSHEET_ID = "1Z35OcOCf9tTHh9MVWvpAGnJrv8o7JShvwbokpLBFi7Y"
 
-# Columnas de la hoja "Animes" (A..M)
+# Columnas de la hoja "Animes" (A..N)
 ENCABEZADOS_ANIMES = [
     "Anime", "Episodio", "Enlace", "Fuente",
     "Fuentes Fallidas", "Fecha Detección",
     "Fecha Actualización", "Fecha Descarga", "Estado",
     "Modelo Gemini", "Detalle Gemini", "Fecha Procesamiento Gemini",
     "Evaluación Gemini",   # la escribe el bot de Telegram (Apps Script), no Python
+    "Archivo",             # ruta relativa del video descargado (para borrar al marcar Visto)
 ]
-NUM_COLUMNAS_ANIMES = len(ENCABEZADOS_ANIMES)   # 13
-RANGO_ANIMES = "Animes!A:M"
+NUM_COLUMNAS_ANIMES = len(ENCABEZADOS_ANIMES)   # 14
+RANGO_ANIMES = "Animes!A:N"
 
 # Lista global para acumular los logs si deseas volcar logs a Sheets
 logs_acumulados_sheets = []
@@ -174,6 +175,7 @@ def leer_animes_pendientes(sheet_service):
                 detalle_gemini = fila[10].strip() if len(fila) > 10 else ""
                 fecha_gemini = fila[11].strip() if len(fila) > 11 else ""
                 evaluacion_gemini = fila[12].strip() if len(fila) > 12 else ""
+                archivo = fila[13].strip() if len(fila) > 13 else ""
 
                 # Filtrar solo si el estado es 'Pendiente' o 'Cambiar Fuente'
 
@@ -190,7 +192,8 @@ def leer_animes_pendientes(sheet_service):
                     "modelo_gemini": modelo_gemini,
                     "detalle_gemini": detalle_gemini,
                     "fecha_gemini": fecha_gemini,
-                    "evaluacion_gemini": evaluacion_gemini
+                    "evaluacion_gemini": evaluacion_gemini,
+                    "archivo": archivo
                 })
 
         logging.info(
@@ -229,10 +232,14 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
                     fila.append("")
                 filas_antiguas.append(fila)
 
-        # Lo que Gemini ya escribió en una fila no debe perderse cuando esa
-        # misma fila se vuelve a insertar arriba como "nueva".
+        # Lo que Gemini ya escribió en una fila (y el archivo descargado) no debe
+        # perderse cuando esa misma fila se vuelve a insertar arriba como "nueva".
         gemini_previo = {
             (str(f[0]).strip().lower(), str(f[1]).strip()): f[9:13]
+            for f in filas_antiguas
+        }
+        archivo_previo = {
+            (str(f[0]).strip().lower(), str(f[1]).strip()): f[13]
             for f in filas_antiguas
         }
 
@@ -260,6 +267,7 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
             detalle_g = anime.get("detalle_gemini") or previo[1]
             fecha_g = anime.get("fecha_gemini") or previo[2]
             evaluacion_g = anime.get("evaluacion_gemini") or previo[3]
+            archivo_g = anime.get("archivo") or archivo_previo.get(clave_fila, "")
 
             filas_nuevas.append([
                 nombre_anime,
@@ -274,7 +282,8 @@ def guardar_y_actualizar_historial_sheets(sheet_service, resultados_animes):
                 modelo_g,
                 detalle_g,
                 fecha_g,
-                evaluacion_g
+                evaluacion_g,
+                archivo_g
             ])
             # Clave única para identificar duplicados: (nombre_lowercase, episodio_string)
             claves_nuevas.add(
@@ -367,7 +376,8 @@ def actualizar_estado_google_sheets(
     nueva_fuente=None,
     fuentes_fallidas=None,
     fecha_actualizacion=None,
-    crear_si_no_existe=True
+    crear_si_no_existe=True,
+    archivo=None
 ):
     """
     Busca y actualiza un registro existente. Si no existe y crear_si_no_existe=True,
@@ -378,7 +388,7 @@ def actualizar_estado_google_sheets(
         return False
 
     try:
-        rango_lectura = f"{nombre_hoja}!A:M"
+        rango_lectura = f"{nombre_hoja}!A:N"
         resultado_lectura = sheet_service.spreadsheets().values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=rango_lectura
@@ -422,7 +432,8 @@ def actualizar_estado_google_sheets(
                     f_act,
                     f_desc,         # Fecha Descarga
                     str(nuevo_estado),
-                    "", "", "", ""  # Modelo / Detalle / Fecha Gemini / Evaluación
+                    "", "", "", "",  # Modelo / Detalle / Fecha Gemini / Evaluación
+                    str(archivo or "")
                 ]
 
                 sheet_service.spreadsheets().values().append(
@@ -441,7 +452,7 @@ def actualizar_estado_google_sheets(
                     f"⚠️ No se encontró '{nombre_anime}' Ep. {episodio} en Google Sheets para actualizar.")
                 return False
 
-        # Normalizar a 9 columnas si la fila ya existía
+        # Normalizar a NUM_COLUMNAS_ANIMES columnas si la fila ya existía
         while len(fila_actual) < NUM_COLUMNAS_ANIMES:
             fila_actual.append("")
 
@@ -452,6 +463,8 @@ def actualizar_estado_google_sheets(
             fila_actual[3] = str(nueva_fuente)
         if fuentes_fallidas is not None:
             fila_actual[4] = str(fuentes_fallidas)
+        if archivo is not None:
+            fila_actual[13] = str(archivo)
 
         # 🟢 CAMBIO 2: Solo actualiza Fecha Actualización (índice 6) si se pasa explícitamente.
         # Si fecha_actualizacion es None, se MANTIENE intacto lo que ya había en el Sheet.
@@ -464,7 +477,7 @@ def actualizar_estado_google_sheets(
 
         fila_actual[8] = str(nuevo_estado)
 
-        celda_destino = f"{nombre_hoja}!A{fila_encontrada_num}:M{fila_encontrada_num}"
+        celda_destino = f"{nombre_hoja}!A{fila_encontrada_num}:N{fila_encontrada_num}"
 
         sheet_service.spreadsheets().values().update(
             spreadsheetId=SPREADSHEET_ID,
@@ -546,46 +559,75 @@ def registrar_gemini_en_sheets(
         return False
 
 
-def verificar_animes_desaparecidos(sheet_service, animes_registrados_sheets, animes_encontrados_web):
-    """
-    Compara los animes pendientes en Google Sheets con los encontrados en la web.
-    Si un anime pendiente ya no está en la web, actualiza su estado a 'Completado'.
-    """
-    if not sheet_service:
-        return
-
-# Normalizamos correctamente los datos que vienen de la web
+def _expandir_episodios_web(animes_encontrados_web):
+    """Construye {(nombre_lower, episodio_str)} expandiendo todos los pendientes."""
     animes_web_set = set()
     for a in animes_encontrados_web:
-        nombre = str(a.get("nombre_anime", a.get("nombre", ""))
-                     ).strip().lower()
-        episodio = str(a.get("episodio", a.get(
-            "episodio_buscado", ""))).strip()
-        if nombre and episodio:
-            animes_web_set.add((nombre, episodio))
+        nombre = str(a.get("nombre_anime", a.get("nombre", ""))).strip().lower()
+        if not nombre:
+            continue
+        pendientes = a.get("pendientes", 0)
+        ep_actual = a.get("episodio_actual")
+        try:
+            pendientes_int = int(pendientes) if pendientes is not None else 0
+            ep_actual_int = int(ep_actual) if ep_actual is not None else None
+        except (TypeError, ValueError):
+            pendientes_int, ep_actual_int = 0, None
+
+        if pendientes_int > 0 and ep_actual_int is not None:
+            for i in range(1, pendientes_int + 1):
+                animes_web_set.add((nombre, str(ep_actual_int + i)))
+        else:
+            episodio = str(a.get("episodio", a.get("episodio_buscado", ""))).strip()
+            if episodio:
+                animes_web_set.add((nombre, episodio))
+    return animes_web_set
+
+
+def verificar_animes_desaparecidos(
+    sheet_service,
+    animes_registrados_sheets,
+    animes_encontrados_web,
+    estados_objetivo=("pendiente",),
+):
+    """
+    Compara los animes en Google Sheets con los encontrados en la web.
+    Si un episodio cuyo estado esté en `estados_objetivo` ya no figura en la
+    lista de pendientes de la web, actualiza su estado a 'Visto'.
+    """
+    if not sheet_service:
+        return 0
+
+    if animes_encontrados_web is None:
+        logging.warning(
+            "⚠️ No se pudo obtener la lista de la web; se omite marcar episodios como 'Visto'."
+        )
+        return 0
+
+    animes_web_set = _expandir_episodios_web(animes_encontrados_web)
+    objetivos = {e.strip().lower() for e in estados_objetivo}
 
     logging.info(
-        "🔍 Verificando animes pendientes frente al servidor actual...")
+        "🔍 Verificando episodios frente al servidor web actual...")
 
     actualizaciones_realizadas = 0
 
     for item in animes_registrados_sheets:
-        # Solo evaluamos registros que estén estrictamente como "Pendiente"
-        if item.get("estado", "").strip().lower() == "pendiente":
+        if item.get("estado", "").strip().lower() in objetivos:
             nombre_sheet = str(item.get("nombre", "")).strip().lower()
             episodio_sheet = str(item.get("episodio", "")).strip()
 
-            # Si el anime y episodio que estaban pendientes YA NO figuran en la web actual
+            # Si el anime y episodio YA NO figuran en la web actual -> está Visto
             if (nombre_sheet, episodio_sheet) not in animes_web_set:
                 logging.info(
-                    f"🔄 '{item.get('nombre')}' Ep. {episodio_sheet} ya no está en la web. Cambiando a 'Completado'...")
+                    f"👁️ '{item.get('nombre')}' Ep. {episodio_sheet} ya no está en la web. Cambiando a 'Visto'...")
 
                 exito = actualizar_estado_google_sheets(
                     sheet_service,
                     nombre_hoja="Animes",
                     nombre_anime=item.get("nombre"),
                     episodio=episodio_sheet,
-                    nuevo_estado="Visto"
+                    nuevo_estado="Visto",
                 )
 
                 if exito:
@@ -593,10 +635,11 @@ def verificar_animes_desaparecidos(sheet_service, animes_registrados_sheets, ani
 
     if actualizaciones_realizadas > 0:
         logging.info(
-            f"✅ Se actualizaron {actualizaciones_realizadas} animes a 'Completado'.")
+            f"✅ Se actualizaron {actualizaciones_realizadas} episodio(s) a 'Visto'.")
     else:
         logging.info(
-            "ℹ️ Todos los animes pendientes siguen vigentes en el servidor.")
+            "ℹ️ Todos los episodios revisados siguen vigentes en el servidor.")
+    return actualizaciones_realizadas
 
 
 def guardar_logs_en_sheets(service):
